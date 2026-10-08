@@ -1,0 +1,143 @@
+/* V3: one clear, one choice, then back to play. */
+html.arcade-ui[data-v3] #stage #v3-rules-open{position:absolute;z-index:8;top:max(12px,env(safe-area-inset-top));right:12px;display:grid;place-items:center;width:44px;height:44px;min-width:44px;min-height:44px;margin:0;padding:10px;border:2px solid #dcf6ff;border-radius:50%;background:#347bed66;color:#f5fcff;box-shadow:inset 0 0 0 2px #6bb7f4,0 2px 0 #1d58ab;pointer-events:auto;cursor:pointer;touch-action:manipulation}
+html[data-v3] #v3-rules-open svg{width:24px;height:24px;display:block;pointer-events:none}
+html.arcade-ui[data-v3] #stage #v3-rules-open:hover{background:#60b1f2b3}
+html.arcade-ui[data-v3] #stage #v3-rules-open:active{transform:translateY(2px)}
+html.arcade-ui[data-v3] #stage #v3-rules-open:focus-visible{outline:3px solid #c4ff17;outline-offset:3px}
+html[data-v3] #buff-hud,html[data-v3] #buff-proc{display:none!important}
+html[data-v3] #lite-reward-panel{display:flex;flex-direction:column;gap:14px;min-height:0!important;width:100%}
+html[data-v3] #lite-reward-panel[hidden]{display:none!important}
+html[data-v3] #lite-reward-panel [hidden],html[data-v3] #lite-shop-hero[hidden]{display:none!important}
+html.arcade-ui[data-v3] #stage #overlay[data-lite-page=supply] .dialog{height:auto!important;min-height:0!important;max-height:calc(100dvh - 28px)!important;padding:82px 22px 26px!important;overflow:auto!important}
+html[data-v3] #lite-reward-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0!important}
+html[data-v3] #lite-reward-title{font-size:24px;margin:0}
+html[data-v3] #lite-shop-wallet{font-size:12px;white-space:nowrap}
+html[data-v3] #lite-reward-summary{font-size:12px;margin:0;color:#45668c}
+html[data-v3] #v3-reward-choices{display:grid;gap:12px}
+html.arcade-ui[data-v3] #stage #overlay .v3-reward-choice{display:grid;grid-template-columns:54px 1fr 24px;align-items:center;gap:10px;width:100%;min-height:98px;padding:12px;border:2px solid #5b79ff;border-radius:12px;background:#f0fbff;box-shadow:0 3px 0 #aacfea;text-align:left;color:#294a7b}
+html[data-v3] .v3-choice-art{width:52px;height:52px;display:grid;place-items:center;background:#dceeff;border-radius:8px}
+html[data-v3] .v3-choice-art img{width:40px;height:40px;image-rendering:pixelated}
+html[data-v3] .v3-choice-copy{display:grid;gap:4px;min-width:0}
+html[data-v3] .v3-choice-copy small{font-size:10px;color:#6582a1}
+html[data-v3] .v3-choice-copy strong{font-size:16px}
+html[data-v3] .v3-choice-copy>span{font-size:11px;line-height:1.5;overflow-wrap:anywhere}
+html[data-v3] .v3-reward-choice>b{font-size:17px;color:#4268ef}
+html[data-v3] .v3-reward-choice:disabled{opacity:.55}
+html[data-v3] #lite-choice-refresh{display:flex;flex-direction:column;align-items:center;gap:8px;margin:0}
+html[data-v3] #v3-shop-open,html[data-v3] #lite-next{width:100%;min-height:44px;border:2px solid #3e64ff;border-radius:12px;background:#c4ff17;color:#294a7b;font:inherit;font-weight:700;box-shadow:0 3px 0 #9bc5e8}
+html[data-v3] #lite-refresh-reward{min-height:40px}
+html.arcade-ui[data-v3] #stage #overlay[data-lite-page=shop] .dialog{padding-bottom:28px!important}
+@media(max-width:350px){html.arcade-ui[data-v3] #stage #overlay[data-lite-page=supply] .dialog{padding:68px 14px 22px!important}html.arcade-ui[data-v3] #stage #overlay .v3-reward-choice{grid-template-columns:38px 1fr 20px;min-height:84px;padding:9px;gap:8px}html[data-v3] .v3-choice-art{width:36px;height:40px}html[data-v3] .v3-choice-art img{width:32px;height:32px}html[data-v3] .v3-choice-copy strong{font-size:14px}html[data-v3] #lite-reward-title{font-size:21px}html[data-v3] #lite-reward-panel{gap:10px}}
+/* Full game-area supply screen. The three rewards are the primary controls. */
+html.arcade-ui[data-v3] #stage #overlay[data-lite-page=supply]{padding:0!important;align-items:stretch!important}
+html.arcade-ui[data-v3] #stage #overlay[data-lite-page=supply] .dialog{width:100%!important;height:100%!important;min-height:100%!important;max-height:100%!important;border-radius:22px!important;padding:84px 24px 30px!important;overflow:auto!important;display:flex!important;flex-direction:column!important;box-shadow:none!important;background:#daeffb!important}
+html[data-v3] #overlay[data-lite-page=supply] #lite-reward-panel{flex:1;gap:12px!important;display:flex;min-height:0}
+html[data-v3] #overlay[data-lite-page=supply] #lite-reward-heading{flex-shrink:0}
+html[data-v3] #overlay[data-lite-page=supply] #lite-reward-title{font-size:27px!important;letter-spacing:.04em;text-shadow:2px 2px white}
+html[data-v3] #overlay[data-lite-page=supply] #lite-reward-summary{font-family:"Microsoft YaHei",sans-serif;font-size:12px!important;font-weight:600}
+html[data-v3] #overlay[data-lite-page=supply] #v3-reward-choices{flex:1;display:grid;grid-template-rows:repeat(3,minmax(112px,1fr));gap:14px;margin:10px 0 8px}
+html.arcade-ui[data-v3] #stage #overlay[data-lite-page=supply] .v3-reward-choice{position:relative;grid-template-columns:66px minmax(0,1fr) 22px;grid-template-rows:1fr auto;gap:5px 12px;min-height:112px;padding:13px 14px 10px!important;border:2px solid #7185f0!important;border-radius:15px!important;background:linear-gradient(110deg,#e8f6ff 0 26%,#f7fcff 26%)!important;box-shadow:0 5px 0 #a8c4e9!important;overflow:hidden;transition:transform .12s,border-color .12s}
+html.arcade-ui[data-v3] #stage #overlay[data-lite-page=supply] .v3-reward-choice[data-kind=special]{background:linear-gradient(110deg,#e9e7ff 0 26%,#f7fcff 26%)!important}
+html[data-v3] #overlay[data-lite-page=supply] .v3-choice-art{grid-row:1/3;width:60px;height:60px;border:2px solid #40567e;border-radius:50%;background:#f3fbff;box-shadow:inset 0 0 0 3px white,inset 0 0 0 5px #c6dbea,0 4px 0 #8393e6}
+html[data-v3] #overlay[data-lite-page=supply] .v3-choice-art img{width:36px;height:36px}
+html[data-v3] #overlay[data-lite-page=supply] .v3-choice-copy{gap:5px}
+html[data-v3] #overlay[data-lite-page=supply] .v3-choice-copy small{font:700 10px "Microsoft YaHei",sans-serif;color:#6b83a8}
+html[data-v3] #overlay[data-lite-page=supply] .v3-choice-copy strong{font-size:18px!important;color:#2f447a}
+html[data-v3] #overlay[data-lite-page=supply] .v3-choice-copy>span{font:600 12px/1.6 "Microsoft YaHei",sans-serif;color:#52708f}
+html[data-v3] #overlay[data-lite-page=supply] .v3-reward-choice>b{align-self:start;font-size:17px!important;color:#4969ee}
+html[data-v3] #overlay[data-lite-page=supply] .v3-choice-claim{grid-column:2/4;display:flex;align-items:center;justify-content:flex-end;gap:8px;font:700 11px "Microsoft YaHei",sans-serif;color:#5170af}.v3-choice-claim i{display:grid;place-items:center;width:25px;height:20px;background:#c8fc32;border-radius:6px;font-style:normal;color:#36527a}
+html.arcade-ui[data-v3] #stage #overlay[data-lite-page=supply] .v3-reward-choice:hover{border-color:#5271e6!important;transform:translateY(-2px)}
+html.arcade-ui[data-v3] #stage #overlay[data-lite-page=supply] .v3-reward-choice:focus-visible{outline:4px solid #b8ed1d;outline-offset:3px}
+html.arcade-ui[data-v3] #stage #overlay[data-lite-page=supply] .v3-reward-choice:active{transform:translateY(2px)}
+html[data-v3] #overlay[data-lite-page=supply] #lite-choice-refresh{flex-shrink:0;margin:8px 0 0;gap:6px}
+html.arcade-ui[data-v3] #stage #overlay[data-lite-page=supply] #lite-refresh-reward{width:100%;min-height:44px!important;margin:0!important;border:2px solid #7187e7!important;border-radius:12px!important;background:#f0fbff!important;color:#355688!important;box-shadow:0 3px 0 #b0cbe8!important;font-size:14px!important}
+html[data-v3] #overlay[data-lite-page=supply] #lite-refresh-status{font:11px "Microsoft YaHei",sans-serif;color:#6280a0}
+html[data-v3] .v3-supply-actions{display:flex;align-items:center;justify-content:flex-end;gap:10px;min-width:0}
+html[data-v3] #overlay[data-lite-page=supply] #lite-reward-title{white-space:nowrap}
+html.arcade-ui[data-v3] #stage #overlay[data-lite-page=supply] #v3-shop-open{display:flex;align-items:center;justify-content:center;gap:6px;flex-shrink:0;width:auto;min-height:44px;margin:0!important;padding:5px 10px!important;border:2px solid #4b68ff!important;border-radius:12px;background:#c4ff17!important;box-shadow:0 3px 0 #95b9df!important;font-size:13px!important;color:#294a7b!important;text-decoration:none}
+html[data-v3] #v3-shop-open img{width:26px;height:26px;image-rendering:pixelated}
+html.arcade-ui[data-v3] #stage #overlay[data-lite-page=supply] #v3-shop-open:hover{background:#d7ff69!important}
+html.arcade-ui[data-v3] #stage #overlay[data-lite-page=supply] #v3-shop-open:active{transform:translateY(2px);box-shadow:0 1px 0 #95b9df!important}
+html[data-v3] #v3-shop-open:focus-visible{outline:3px solid #294a7b;outline-offset:3px}
+html[data-v3] #v3-shop-open:disabled{opacity:.5}
+@media(max-width:350px){html[data-v3] .v3-supply-actions{gap:6px}html.arcade-ui[data-v3] #stage #overlay[data-lite-page=supply] #v3-shop-open{padding:5px 6px!important;gap:4px}html.arcade-ui[data-v3] #stage #lite-shop-wallet{padding:5px 7px;font-size:11px}}
+@media(max-height:700px){html.arcade-ui[data-v3] #stage #overlay[data-lite-page=supply] .dialog{padding:66px 16px 18px!important}html[data-v3] #overlay[data-lite-page=supply] #lite-reward-panel{gap:8px!important}html[data-v3] #overlay[data-lite-page=supply] #v3-reward-choices{grid-template-rows:repeat(3,minmax(100px,1fr));gap:10px;margin:4px 0}html.arcade-ui[data-v3] #stage #overlay[data-lite-page=supply] .v3-reward-choice{min-height:100px;padding:9px 10px!important}html[data-v3] #overlay[data-lite-page=supply] #lite-reward-title{font-size:23px!important}html[data-v3] #overlay[data-lite-page=supply] .v3-choice-copy>span{font-size:11px}html[data-v3] #overlay[data-lite-page=supply] #lite-choice-refresh{margin-top:2px}}
+@media(max-width:350px){html.arcade-ui[data-v3] #stage #overlay[data-lite-page=supply] .v3-reward-choice{grid-template-columns:48px minmax(0,1fr) 20px;gap:4px 9px}html[data-v3] #overlay[data-lite-page=supply] .v3-choice-art{width:46px;height:46px}html[data-v3] #overlay[data-lite-page=supply] .v3-choice-art img{width:30px;height:30px}html[data-v3] #overlay[data-lite-page=supply] .v3-choice-copy strong{font-size:16px!important}}
+@media(prefers-reduced-motion:reduce){html.arcade-ui[data-v3] #stage #overlay[data-lite-page=supply] .v3-reward-choice{transition:none}}
+html.arcade-ui[data-v3] #stage #overlay[data-lite-page=supply] #lite-reward-panel{padding:0!important}
+html.arcade-ui[data-v3] #stage #overlay[data-lite-page=supply] #lite-reward-summary{margin:0!important}
+html.arcade-ui[data-v3] #stage #overlay[data-lite-page=supply] #lite-choice-refresh{padding:0!important;min-height:0!important}
+html.arcade-ui[data-v3] #stage #overlay[data-lite-page=supply] #v3-reward-choices{min-height:0!important}
+@media(max-height:650px){html[data-v3] #overlay[data-lite-page=supply] #lite-reward-panel{gap:6px!important}html[data-v3] #overlay[data-lite-page=supply] #v3-reward-choices{grid-template-rows:repeat(3,minmax(84px,1fr));gap:8px;margin:2px 0}html.arcade-ui[data-v3] #stage #overlay[data-lite-page=supply] .v3-reward-choice{min-height:84px!important;padding:7px 10px!important}html[data-v3] #overlay[data-lite-page=supply] .v3-choice-copy{gap:2px}html[data-v3] #overlay[data-lite-page=supply] .v3-choice-copy>span{line-height:1.35}html[data-v3] #overlay[data-lite-page=supply] .v3-choice-claim{font-size:10px}}
+@media(max-height:650px){html.arcade-ui[data-v3] #stage #overlay[data-lite-page=supply] .v3-reward-choice{grid-template-rows:1fr}html[data-v3] #overlay[data-lite-page=supply] .v3-choice-art{grid-row:1}html[data-v3] #overlay[data-lite-page=supply] .v3-choice-claim{display:none}}
+/* Shop dismiss uses the shared X; purchase remains the sole footer action. */
+html[data-v3] #lite-shop-detail .lite-shop-detail-head{padding-right:46px}
+html[data-v3] #lite-shop-detail .lite-shop-detail-actions{grid-template-columns:1fr}
+html[data-v3] #lite-shop-detail #lite-shop-detail-buy{grid-column:1/-1;width:100%}
+
+/* Inventory count sits immediately before the item's category. */
+
+/* Approved C artwork: white pixel lettering over a lime lightning burst. */
+html.arcade-ui[data-v3] #pause-tools .pause-actions{grid-template-columns:repeat(4,minmax(0,1fr))}
+html.arcade-ui[data-v3] #pause-tools .pause-actions>:is(#sound,#pause-settings,#help,#pause-codex){display:flex;align-items:center;justify-content:center;min-width:0;min-height:44px;height:44px}
+html[data-v3] .v3-sound-icon{display:block;width:24px;height:24px;fill:currentColor;pointer-events:none}
+html[data-v3] #sound[data-muted=false] .v3-sound-muted,html[data-v3] #sound[data-muted=true] .v3-sound-waves{display:none}
+html[data-v3] #sound[data-muted=true]{color:#64769a}
+html[data-v3] #lite-stage-clear .lite-clear-emblem{width:min(96%,620px);height:auto;transform:translateY(-32px);animation:none;text-align:center}
+html[data-v3] #lite-stage-clear .lite-clear-lettering{width:100%;height:auto;image-rendering:auto;animation:v3-clear-impact .38s cubic-bezier(.16,1,.3,1) both}
+html[data-v3] #lite-stage-clear .lite-clear-coins{margin:0 12px;gap:8px;animation:v3-clear-reward .25s .16s ease-out both}
+html[data-v3] #lite-stage-clear .lite-clear-coins span{font-size:17px;color:#f5fcff}
+html[data-v3] #lite-stage-clear .lite-clear-coins strong{font-size:32px;line-height:36px;color:#ffe550}
+html[data-v3] #lite-stage-clear .lite-clear-pixels{top:36%}
+@keyframes v3-clear-impact{0%{opacity:0;transform:scale(.78);clip-path:inset(0 42%)}60%{opacity:1;transform:scale(1.035);clip-path:inset(0)}100%{opacity:1;transform:scale(1);clip-path:inset(0)}}
+@keyframes v3-clear-reward{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@media(max-width:350px){html[data-v3] #lite-stage-clear .lite-clear-coins span{font-size:15px}html[data-v3] #lite-stage-clear .lite-clear-coins strong{font-size:28px}}
+@media(prefers-reduced-motion:reduce){html[data-v3] #lite-stage-clear :is(.lite-clear-lettering,.lite-clear-coins){animation:none}}
+html.arcade-ui[data-v3] #stage #lite-shop-offers .lite-shop-buy{grid-template-areas:"heading heading" "art art" "price price";grid-template-rows:auto minmax(36px,1fr) 28px;height:auto;min-height:132px!important}
+html[data-v3] .v3-shop-card-heading{grid-area:heading;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:3px 6px;padding:6px 7px 0;min-width:0;width:100%;box-sizing:border-box}
+html.arcade-ui[data-v3] #stage #lite-shop-offers .v3-shop-card-heading strong{padding:0!important;min-width:0;white-space:normal;font-size:13px!important;line-height:18px!important}
+html[data-v3] .v3-shop-card-labels{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:4px;margin-left:auto}
+html.arcade-ui[data-v3] #stage #lite-shop-offers .v3-shop-card-labels .lite-shop-category{margin:0;font:10px/14px "Microsoft YaHei",sans-serif!important;white-space:nowrap;padding:2px 4px}
+html[data-v3] .v3-shop-owned{padding:2px 4px;border-radius:5px;background:#eaf1ff;color:#365bd0;font:700 10px/14px "Microsoft YaHei",sans-serif;white-space:nowrap}
+@media(max-height:700px){html.arcade-ui[data-v3] #stage #lite-shop-offers .lite-shop-buy{min-height:106px!important;grid-template-rows:auto minmax(32px,1fr) 24px}}
+
+html.arcade-ui[data-v3] #stage .hud{grid-template-columns:minmax(0,1fr) 44px;left:16px;right:12px}
+html.arcade-ui[data-v3] #stage .hud #pause{grid-column:2;grid-row:1}
+html.arcade-ui[data-v3] #stage .stage-progress{grid-template-columns:minmax(0,1fr) auto;grid-template-rows:25px 5px;gap:5px 8px}
+html.arcade-ui[data-v3] #stage .stage-progress .life-line{grid-column:1;grid-row:1;justify-self:start;gap:0}
+html.arcade-ui[data-v3] #stage .stage-progress .goal-line{grid-column:2;grid-row:1;justify-self:end}
+html.arcade-ui[data-v3] #stage .stage-progress .track{grid-row:2;grid-column:1/-1}
+html[data-v3] .life-line>#lives,html[data-v3] .life-line>.life-pixel{display:none!important}
+#v3-life-hearts{display:flex;align-items:center;gap:7px;height:24px}
+html[data-v3] #v3-life-hearts .v3-life-heart{position:relative;display:block;inset:auto;width:18px;height:18px;transform:none;flex:none;filter:drop-shadow(0 2px #973665)}
+html.arcade-ui[data-v3] #stage #game-ui>#drop-budget{position:absolute;top:calc(50% - 105px);left:12px;display:flex;flex-direction:column;align-items:flex-start;gap:5px;margin:0;padding:0;min-width:0;width:78px;color:#fff;line-height:1.2;pointer-events:none;text-shadow:1px 2px #205fb2;z-index:4}
+html.arcade-ui[data-v3] #stage #game-ui>#drop-budget #drop-budget-label{font-size:0}
+html.arcade-ui[data-v3] #stage #game-ui>#drop-budget #drop-budget-label::after{content:'投放';font-size:10px}
+html.arcade-ui[data-v3] #stage #game-ui>#drop-budget #drops-remaining{font-size:15px;white-space:nowrap}
+html.arcade-ui[data-v3] #stage #game-ui>#drop-budget[data-state=low]{color:#fff79c}
+html[data-v3] .v3-audio-settings{display:grid;grid-template-columns:44px auto minmax(40px,1fr) 46px;align-items:center;gap:10px;margin:5px 0 18px;padding:12px;border:1px solid #9bbdec;border-radius:12px;background:#eaf7ff}
+html[data-v3] .v3-audio-settings label{font-size:13px;font-weight:700}
+html[data-v3] .v3-audio-settings input{width:100%;min-width:0;accent-color:#4668f3;height:44px;margin:0;cursor:pointer}
+html[data-v3] #v3-audio-toggle{display:grid;place-items:center;width:44px;height:44px;min-height:44px;padding:8px;border:1px solid #7596e7;border-radius:10px;background:#d9edff;color:#365598}
+html[data-v3] #v3-audio-toggle[data-muted=true] .v3-sound-waves,html[data-v3] #v3-audio-toggle[data-muted=false] .v3-sound-muted{display:none}
+html[data-v3] #v3-volume-value{font-size:12px;font-weight:700;color:#4263b9;text-align:right}
+html[data-v3] #motion-tuner-description,html[data-v3] #growth-summary{display:none!important}
+html[data-v3] #motion-tuner>[role=status]:empty{display:none}
+html[data-v3] #exit-dialog .exit-choices small:empty{display:none}
+html[data-v3] .backpack-status:empty{display:none}
+html.arcade-ui[data-v3] #motion-tuner .v3-audio-settings{display:grid;grid-template-columns:44px auto minmax(40px,1fr) 46px;align-items:center;gap:8px;margin:5px 0 18px;padding:10px}
+html.arcade-ui[data-v3] #motion-tuner .v3-audio-settings>*{grid-column:auto;grid-row:auto;margin:0}
+html.arcade-ui[data-v3] #motion-tuner .v3-audio-settings input{width:100%;min-width:0;height:44px}
+@media(max-width:350px){html[data-v3] .v3-audio-settings{gap:6px;padding:8px;grid-template-columns:44px auto minmax(30px,1fr) 38px}html.arcade-ui[data-v3] #stage #game-ui>#drop-budget{left:10px;width:70px}html.arcade-ui[data-v3] #stage #game-ui>#drop-budget #drops-remaining{font-size:13px}}
+
+/* Claimed supply stays visible until the player continues. */
+html.arcade-ui[data-v3] #stage #overlay[data-lite-page=supply] #lite-refresh-reward[data-action=next]{min-height:48px!important;background:#c4ff17!important;border-color:#4966ff!important;border-radius:24px!important;font-size:18px!important;box-shadow:0 4px 0 #91b8e4!important}
+html.arcade-ui[data-v3] #stage #overlay[data-lite-page=supply] .v3-reward-choice[data-claimed=true]{opacity:1;border-color:#92c710!important;background:linear-gradient(110deg,#e3f8ae 0 26%,#f7fcff 26%)!important}
+html[data-v3] #overlay[data-lite-page=supply] .v3-reward-choice[data-claimed=true] .v3-choice-claim{color:#507400}
+html.arcade-ui[data-v3] #stage #overlay[data-lite-page=supply] .v3-reward-choice:disabled:hover,html.arcade-ui[data-v3] #stage #overlay[data-lite-page=supply] .v3-reward-choice:disabled:active{transform:none}
+
+html[data-v3] #lite-heavy-markers{position:absolute;inset:0;pointer-events:none;z-index:4}
+html[data-v3] #lite-heavy-markers>span{position:absolute;transform:translate(-50%,-50%);font:800 9px/1.1 "Microsoft YaHei",sans-serif;color:#e0ff55;background:#183957df;padding:1px 2px;border-radius:2px;white-space:nowrap;text-shadow:0 1px #132944;pointer-events:none}
+html.arcade-ui[data-lite][data-v3] #stage #score-feedback[data-heavy=true] #feedback-multiplier{display:block!important;color:#ddff4d!important;font-size:12px;font-weight:800;line-height:1.5;text-shadow:1px 2px #1d427d!important}
+
+html[data-v3] .lite-coin-reward{position:absolute;inset:0;pointer-events:none;z-index:19;color:#ffda42}
