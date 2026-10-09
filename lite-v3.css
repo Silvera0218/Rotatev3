@@ -141,3 +141,60 @@ html[data-v3] #lite-heavy-markers>span{position:absolute;transform:translate(-50
 html.arcade-ui[data-lite][data-v3] #stage #score-feedback[data-heavy=true] #feedback-multiplier{display:block!important;color:#ddff4d!important;font-size:12px;font-weight:800;line-height:1.5;text-shadow:1px 2px #1d427d!important}
 
 html[data-v3] .lite-coin-reward{position:absolute;inset:0;pointer-events:none;z-index:19;color:#ffda42}
+
+/* Ranked home: a single sky-tower screen replaces the old start controls. */
+html[data-v3] #overlay[data-home=true][data-v3-home=true]{padding:10px!important;display:grid!important;place-items:center!important;background:#0c2b7d!important;overflow:hidden!important}
+html[data-v3] #overlay[data-home=true][data-v3-home=true] .dialog{display:flex!important;align-items:stretch!important;justify-content:center!important;width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;padding:0!important;background:transparent!important;box-shadow:none!important;border:0!important;overflow:visible!important}
+html[data-v3] #overlay[data-home=true][data-v3-home=true] .dialog>:not(#v3-home-panel){display:none!important}
+html[data-v3] #overlay[data-home=true][data-v3-home=true] #v3-home-panel{display:flex!important}
+html[data-v3] #overlay[data-home=true][data-v3-home=true] .home-actions,html[data-v3] #overlay[data-home=true][data-v3-home=true] .arc-home-brand,html[data-v3] #overlay[data-home=true][data-v3-home=true] .lite-home-badge{display:none!important}
+html[data-v3] body.home-active:has(#overlay[data-home=true][data-v3-home=true]) #home-library-open,html[data-v3] body.home-active:has(#overlay[data-home=true][data-v3-home=true]) #motion-tuner-open{display:none!important}
+html[data-v3] #v3-home-panel{position:relative;z-index:4;box-sizing:border-box;width:min(94vw,470px);height:min(96dvh,800px);min-height:0;display:flex;flex-direction:column;gap:10px;padding:14px;color:#173875;background:linear-gradient(180deg,#d8f2ff,#b8e1f7);border:2px solid #8aeaff;border-radius:26px;box-shadow:0 10px 0 #071d5f80,0 0 0 3px #1f54c9;overflow:hidden;font-family:"Microsoft YaHei",sans-serif}
+html[data-v3] .v3-home-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;flex:none;padding:2px 2px 0}
+html[data-v3] .v3-home-head p{margin:0 0 3px;color:#5074a4;font:800 10px/1.2 "Microsoft YaHei",sans-serif;letter-spacing:.12em}
+html[data-v3] .v3-home-head h1{margin:0;color:#193b79;font-size:26px;line-height:1.1;letter-spacing:.04em;text-shadow:2px 2px #fff}
+html[data-v3] .v3-home-record{align-self:center;padding:6px 9px;border:2px solid #4d70df;border-radius:999px;background:#f0fbff;color:#31549b;font-size:11px;font-weight:800;white-space:nowrap;box-shadow:0 2px 0 #96bce0}
+html[data-v3] .v3-home-scene{position:relative;flex:1;min-height:360px;overflow:hidden;border:2px solid #456de1;border-radius:20px;background:#153581;box-shadow:inset 0 0 0 2px #a6eaff,0 4px 0 #84acd3}
+html[data-v3] #v3-home-canvas{display:block;width:100%;height:100%;image-rendering:pixelated}
+html[data-v3] .v3-home-scene-label{position:absolute;top:10px;left:12px;padding:4px 7px;border-radius:6px;background:#102d74bd;color:#effdff;font-size:10px;font-weight:800;letter-spacing:.06em}
+html[data-v3] .v3-home-piece-label{position:absolute;top:10px;right:12px;max-width:54%;padding:4px 7px;border-radius:6px;background:#d7ff42e6;color:#254271;font-size:10px;font-weight:800;text-align:right}
+html[data-v3] .v3-home-controls{position:absolute;right:10px;bottom:10px;left:10px;display:grid;grid-template-columns:repeat(3,42px) minmax(90px,1fr);gap:7px;align-items:center}
+html[data-v3] .v3-home-controls button{min-height:42px;border:2px solid #d8f8ff;border-radius:12px;background:#315ec7e8;color:#f4ffff;font:900 21px/1 "Microsoft YaHei",sans-serif;box-shadow:0 3px 0 #132c70;cursor:pointer;touch-action:manipulation}
+html[data-v3] .v3-home-controls button:last-child{font-size:13px;background:#b8fa28;color:#284a81;border-color:#ebff9b}
+html[data-v3] .v3-home-controls button:active{transform:translateY(2px);box-shadow:0 1px 0 #132c70}
+html[data-v3] .v3-home-controls button:focus-visible,html[data-v3] .v3-home-actions button:focus-visible{outline:3px solid #fff;outline-offset:2px}
+html[data-v3] .v3-home-info{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px;align-items:center;flex:none;min-height:30px;padding:0 2px}
+html[data-v3] .v3-home-info strong{font-size:12px;color:#234c94;white-space:nowrap}
+html[data-v3] .v3-home-info span{font-size:11px;line-height:1.35;color:#52729b;text-align:right}
+html[data-v3] .v3-home-actions{display:grid;grid-template-columns:1.35fr .8fr;gap:8px;flex:none}
+html[data-v3] .v3-home-actions button{min-height:46px;border:2px solid #4569df;border-radius:15px;background:#edfaff;color:#2e4f8d;font:800 14px/1 "Microsoft YaHei",sans-serif;box-shadow:0 3px 0 #8db4db;cursor:pointer;touch-action:manipulation}
+html[data-v3] .v3-home-actions button:first-child{background:#c4ff17;color:#24467e;border-color:#4263df;box-shadow:inset 0 0 0 2px #f0ffae,0 4px 0 #24467e}
+html[data-v3] .v3-home-actions button span{margin-left:8px;font-size:20px;vertical-align:-1px}
+html[data-v3] .v3-home-note{flex:none;margin:0;padding:0 3px;color:#55769b;font-size:10px;line-height:1.35;text-align:center}
+@media(max-height:680px){html[data-v3] #v3-home-panel{height:97dvh;gap:7px;padding:10px;border-radius:20px}html[data-v3] .v3-home-head h1{font-size:22px}html[data-v3] .v3-home-scene{min-height:250px}html[data-v3] .v3-home-controls{bottom:7px}html[data-v3] .v3-home-controls button{min-height:36px}html[data-v3] .v3-home-actions button{min-height:40px}}
+@media(max-width:360px){html[data-v3] #v3-home-panel{width:96vw;padding:9px}html[data-v3] .v3-home-record{font-size:10px;padding:5px 7px}html[data-v3] .v3-home-controls{grid-template-columns:repeat(3,36px) minmax(82px,1fr);gap:5px}html[data-v3] .v3-home-controls button{min-height:36px;font-size:18px}html[data-v3] .v3-home-info{grid-template-columns:1fr;gap:2px}html[data-v3] .v3-home-info span{text-align:left}}
+@media(prefers-reduced-motion:reduce){html[data-v3] #v3-home-canvas{image-rendering:pixelated}}
+
+/* The ranked home is a full scene, not a modal card. */
+html[data-v3] #overlay[data-home=true][data-v3-home=true]{padding:0!important;background:#163b9a!important}
+html[data-v3] #overlay[data-home=true][data-v3-home=true] .dialog{position:relative;display:block!important;width:100%!important;height:100%!important;min-height:100%!important;padding:0!important;overflow:hidden!important}
+html[data-v3] #overlay[data-home=true][data-v3-home=true] #v3-home-panel{position:absolute;inset:0;width:100%;height:100%;min-height:0;padding:0;display:block!important;border:0;border-radius:0;background:transparent;box-shadow:none;overflow:hidden}
+html[data-v3] #overlay[data-home=true][data-v3-home=true] .v3-home-scene{position:absolute;inset:0;min-height:0;border:0;border-radius:0;background:#16449d;box-shadow:none;overflow:hidden}
+html[data-v3] #overlay[data-home=true][data-v3-home=true] .v3-home-head{position:absolute;z-index:3;top:20px;left:20px;right:18px;padding:0;align-items:flex-start;pointer-events:none}
+html[data-v3] #overlay[data-home=true][data-v3-home=true] .v3-home-head p{color:#d7f8ff;text-shadow:1px 2px #153b8d}
+html[data-v3] #overlay[data-home=true][data-v3-home=true] .v3-home-head h1{color:#fff;font-size:clamp(25px,7vw,38px);text-shadow:3px 3px #315ee6,0 5px #153b8d}
+html[data-v3] #overlay[data-home=true][data-v3-home=true] .v3-home-record{margin-top:1px;border-color:#bdf1ff;background:#e8fbff;color:#2853a2;box-shadow:0 3px 0 #153b8d}
+html[data-v3] #overlay[data-home=true][data-v3-home=true] #v3-home-canvas{position:absolute;inset:0;width:100%;height:100%}
+html[data-v3] #overlay[data-home=true][data-v3-home=true] .v3-home-scene-label{top:74px;left:20px;background:#153a8fc4;color:#e8fcff}
+html[data-v3] #overlay[data-home=true][data-v3-home=true] .v3-home-piece-label{top:74px;right:18px;max-width:52%;background:#c4ff17;color:#24467e;box-shadow:0 3px 0 #173878}
+html[data-v3] #overlay[data-home=true][data-v3-home=true] .v3-home-controls{z-index:3;right:16px;bottom:164px;left:auto;grid-template-columns:repeat(4,42px);width:auto;gap:6px}
+html[data-v3] #overlay[data-home=true][data-v3-home=true] .v3-home-controls button{min-height:42px;border-radius:50%;background:#e8fbff;color:#284e9b;border-color:#d6faff;box-shadow:0 3px 0 #173878}
+html[data-v3] #overlay[data-home=true][data-v3-home=true] .v3-home-controls button:last-child{grid-column:1/-1;border-radius:15px;background:#c4ff17;color:#24467e;border-color:#ecff9e}
+html[data-v3] #overlay[data-home=true][data-v3-home=true] .v3-home-info{position:absolute;z-index:3;right:18px;bottom:124px;left:18px;display:flex;justify-content:center;gap:10px;min-height:0;padding:0;color:#fff;text-shadow:1px 2px #153b8d;pointer-events:none}
+html[data-v3] #overlay[data-home=true][data-v3-home=true] .v3-home-info strong,html[data-v3] #overlay[data-home=true][data-v3-home=true] .v3-home-info span{color:#fff;text-align:center}
+html[data-v3] #overlay[data-home=true][data-v3-home=true] .v3-home-actions{position:absolute;z-index:3;right:50%;bottom:25px;left:50%;display:grid;grid-template-columns:1fr;gap:9px;width:min(86vw,330px);transform:translateX(-50%)}
+html[data-v3] #overlay[data-home=true][data-v3-home=true] .v3-home-actions button{min-height:52px;border-radius:14px;font-size:18px;box-shadow:0 4px 0 #173878}
+html[data-v3] #overlay[data-home=true][data-v3-home=true] .v3-home-actions button:last-child{background:#ffe21f;color:#234982;border-color:#ffef8a}
+html[data-v3] #overlay[data-home=true][data-v3-home=true] .v3-home-note{position:absolute;z-index:3;right:14px;bottom:7px;left:14px;color:#dbf9ff;text-shadow:1px 1px #153b8d}
+@media(max-height:680px){html[data-v3] #overlay[data-home=true][data-v3-home=true] .v3-home-controls{bottom:150px}html[data-v3] #overlay[data-home=true][data-v3-home=true] .v3-home-info{bottom:110px}html[data-v3] #overlay[data-home=true][data-v3-home=true] .v3-home-actions{bottom:18px}html[data-v3] #overlay[data-home=true][data-v3-home=true] .v3-home-actions button{min-height:44px;font-size:16px}}
+@media(max-width:360px){html[data-v3] #overlay[data-home=true][data-v3-home=true] .v3-home-controls{right:10px;bottom:157px;grid-template-columns:repeat(4,36px)}html[data-v3] #overlay[data-home=true][data-v3-home=true] .v3-home-controls button{min-height:36px}html[data-v3] #overlay[data-home=true][data-v3-home=true] .v3-home-piece-label{top:70px;font-size:9px}}

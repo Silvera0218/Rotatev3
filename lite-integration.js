@@ -375,7 +375,7 @@ function liteUpdateCompletion(now){
   }
 }
 function liteShowReward(){
-  liteCreateReward();L.litePrepareReward();liteRewardStage=L.stage;
+  liteCreateReward();L.litePrepareReward();v3RegisterRankClear();liteRewardStage=L.stage;
   Ht('','','','');I('overlay').dataset.liteReward='true';I('game-ui').inert=true;I('game-ui').setAttribute('aria-hidden','true');
   liteRewardPanel.hidden=false;I('overlay').querySelector('.dialog').setAttribute('aria-labelledby','lite-reward-title');
   I('start').hidden=true;liteUpdateReward();liteSaveSafe();
@@ -438,6 +438,7 @@ function liteSaveSafe(){try{if(he&&!k0&&!Ie.busy&&['play','checkpoint-complete']
 f5=function(){Qe=null;N3=false;try{Qe=I6(localStorage);}catch{I('home-save-summary').textContent='V3 存档无法读取，可以重新开始。';}
   I('start').innerHTML=Df;const label=I('start').querySelector('.home-start-content > span');if(label)label.textContent=Qe?'继续 V3':'开始游戏';I('start').setAttribute('aria-label',Qe?'继续 V3':'开始游戏');I('start').disabled=false;I('home-new-run').hidden=!Qe;
   if(Qe)I('home-save-summary').textContent=`已保存 · ${Qe.game.endless?'无尽模式 · ':''}第 ${Qe.game.stage+1} 关 · ${Qe.game.score} 分`;else I('home-save-summary').textContent='道具补给 · 特殊方块 · 旋转消除';
+  if(typeof v3ReconcileRankGifts==='function'){v3ReadGroundState();v3ReconcileRankGifts();v3HomeSync();}
 };
 g5=true;m5=true;pa=function(){z3.hidden=true;};pa();z3.onclick=null;
 const liteOriginalB6=B6;
@@ -469,6 +470,44 @@ function liteSyncLives(){
   lifeLine.setAttribute('aria-label','剩余生命 '+value);
 }
 const homeBadge=document.createElement('span');homeBadge.className='lite-home-badge';homeBadge.textContent='ROTATION V3 · 道具补给';I('overlay').append(homeBadge);
+// Ranked home: one shared mode, a slowly turning pixel sky, and a small tower
+// that stores the ordinary blocks earned from completed stages.
+const v3HomeOverlay=I('overlay');v3HomeOverlay.dataset.v3Home='true';
+const v3HomePanel=document.createElement('section');v3HomePanel.id='v3-home-panel';v3HomePanel.setAttribute('aria-labelledby','v3-home-title');
+v3HomePanel.innerHTML='<header class="v3-home-head"><div><p>ROTATION V3 · 排行挑战</p><h1 id="v3-home-title">云端地基</h1></div><span class="v3-home-record" id="v3-home-record">已通关 0 关</span></header><div class="v3-home-scene"><canvas id="v3-home-canvas" width="760" height="920" aria-label="像素天空与方块地基"></canvas><div class="v3-home-scene-label">四面天空盒 · 缓慢旋转</div><div class="v3-home-piece-label" id="v3-home-piece-label">通关后获得普通方块</div><div class="v3-home-controls" id="v3-home-controls" role="group" aria-label="操作赠送方块"><button type="button" id="v3-home-left" aria-label="向左移动">←</button><button type="button" id="v3-home-rotate" aria-label="旋转方块">↻</button><button type="button" id="v3-home-right" aria-label="向右移动">→</button><button type="button" id="v3-home-drop" aria-label="放下方块">↓ 放下</button></div></div><div class="v3-home-info"><strong id="v3-home-gift-count">地面 0 格</strong><span id="v3-home-status">完成排行关卡后，获得一块普通方块</span></div><div class="v3-home-actions"><button type="button" id="v3-home-start">开始排行挑战 <span>→</span></button><button type="button" id="v3-home-rank">查看排行</button></div><p class="v3-home-note">每通关一关获得一块随机普通方块 · 至少一格必须落在矩形地基上</p>';
+v3HomeOverlay.querySelector('.dialog').append(v3HomePanel);
+const v3HomeCanvas=I('v3-home-canvas'),v3HomeCtx=v3HomeCanvas.getContext('2d');
+const v3HomePieces=[
+  {id:'bar',name:'长条方块',color:'#68e6ff',cells:[[0,0],[1,0],[2,0],[3,0]]},
+  {id:'corner',name:'转角方块',color:'#ffcf4b',cells:[[0,0],[0,1],[1,0],[2,0]]},
+  {id:'zig',name:'折线方块',color:'#a7f06a',cells:[[0,0],[1,0],[1,1],[2,1]]},
+  {id:'block',name:'方块',color:'#ff7da9',cells:[[0,0],[1,0],[0,1],[1,1]]},
+  {id:'tee',name:'三叉方块',color:'#a48cff',cells:[[0,0],[1,0],[2,0],[1,1]]}
+];
+const v3GroundKey='rotationV3GroundGiftsV1';let v3GroundState={cleared:0,granted:0,settled:0,queue:[],active:null,tower:[]};let v3HomeFrameId=0,v3HomeLast=0,v3HomeGravity=0;
+function v3RandomPiece(){return v3HomePieces[Math.floor(Math.random()*v3HomePieces.length)].id;}
+function v3PieceById(id){return v3HomePieces.find(piece=>piece.id===id)||v3HomePieces[0];}
+function v3ReadGroundState(){try{const stored=JSON.parse(localStorage.getItem(v3GroundKey)||'{}');if(stored&&typeof stored==='object')v3GroundState={...v3GroundState,...stored,queue:Array.isArray(stored.queue)?stored.queue:[],tower:Array.isArray(stored.tower)?stored.tower:[]};}catch{}}
+function v3CompletedRankStages(){let count=0;const inspect=game=>{if(!game)return;const stages=game.lite?.completedStages;if(Array.isArray(stages))count=Math.max(count,stages.length);if(Number.isInteger(game.stage))count=Math.max(count,game.stage);};inspect(L);try{const saved=JSON.parse(localStorage.getItem('rotationV3SuspendedRunV1')||'null');inspect(saved?.game);}catch{}return count;}
+function v3SaveGroundState(){try{localStorage.setItem(v3GroundKey,JSON.stringify(v3GroundState));}catch{}}
+function v3ReconcileRankGifts(){const completed=Math.max(Number(v3GroundState.cleared)||0,v3CompletedRankStages());v3GroundState.cleared=completed;while((Number(v3GroundState.granted)||0)<completed){v3GroundState.queue.push(v3RandomPiece());v3GroundState.granted++;}v3EnsureActivePiece();v3SaveGroundState();}
+function v3RegisterRankClear(){v3ReadGroundState();const completed=Math.max(v3GroundState.cleared||0,v3CompletedRankStages());v3GroundState.cleared=completed;while((Number(v3GroundState.granted)||0)<completed){v3GroundState.queue.push(v3RandomPiece());v3GroundState.granted++;}v3EnsureActivePiece();v3SaveGroundState();v3HomeSync();}
+function v3EnsureActivePiece(){if(!v3GroundState.active&&v3GroundState.queue.length){v3GroundState.active={id:v3GroundState.queue[0],x:0,y:8,rotation:0};}}
+function v3RotatedCells(piece){let cells=piece.cells.map(([x,y])=>[x,y]);for(let i=0;i<((v3GroundState.active?.rotation||0)%4);i++)cells=cells.map(([x,y])=>[-y,x]);const minX=Math.min(...cells.map(cell=>cell[0])),minY=Math.min(...cells.map(cell=>cell[1]));return cells.map(([x,y])=>[x-minX,y-minY]);}
+function v3HomeCells(active=v3GroundState.active,yOverride=active?.y){if(!active)return [];const piece=v3PieceById(active.id),cells=v3RotatedCells(piece);return cells.map(([x,y])=>({x:x+active.x,y:yOverride+y}));}
+function v3GroundOccupied(x,y){return v3GroundState.tower.some(cell=>cell.x===x&&cell.y===y);}
+function v3HomeFits(cells){return cells.every(cell=>cell.x>=-5&&cell.x<=5&&cell.y>=0&&!v3GroundOccupied(cell.x,cell.y));}
+function v3HomeSupported(cells){return cells.some(cell=>cell.y===0&&cell.x>=-3&&cell.x<=3||v3GroundOccupied(cell.x,cell.y-1));}
+function v3HomeMove(dx){const active=v3GroundState.active;if(!active)return;const cells=v3HomeCells({...active,x:active.x+dx});if(v3HomeFits(cells)){active.x+=dx;v3SaveGroundState();v3HomeSync();}}
+function v3HomeRotate(){const active=v3GroundState.active;if(!active)return;const next={...active,rotation:(active.rotation+1)%4};if(v3HomeFits(v3HomeCells(next))){active.rotation=next.rotation;v3SaveGroundState();v3HomeSync();}}
+let v3HomeMessage='';
+function v3HomeDrop(){const active=v3GroundState.active;if(!active)return;let y=active.y;while(y>0&&v3HomeFits(v3HomeCells(active,y-1)))y--;const cells=v3HomeCells(active,y);if(!v3HomeSupported(cells)){active.y=8;v3HomeMessage='至少一格要落在矩形地基上';v3HomeSync();return;}active.y=y;v3GroundState.tower.push(...cells.map(cell=>({...cell,color:v3PieceById(active.id).color})));v3GroundState.queue.shift();v3GroundState.active=null;v3GroundState.settled++;v3EnsureActivePiece();v3SaveGroundState();v3HomeMessage=v3GroundState.active?'继续放置下一块普通方块':'等待下一次通关奖励';v3HomeSync();}
+function v3HomeTick(dt){const active=v3GroundState.active;if(!active)return;v3HomeGravity+=dt;if(v3HomeGravity<650)return;v3HomeGravity=0;const next=v3HomeCells(active,active.y-1);if(active.y>0&&v3HomeFits(next)){active.y--;v3SaveGroundState();}v3HomeSync();}
+function v3DrawHome(now){if(!v3HomeLast)v3HomeLast=now;const dt=Math.min(50,now-v3HomeLast);v3HomeLast=now;v3HomeTick(dt);const ctx=v3HomeCtx,w=v3HomeCanvas.width,h=v3HomeCanvas.height,yGround=Math.floor(h*.72),yaw=(now*.000012)%1;const sky=ctx.createLinearGradient(0,0,0,yGround);sky.addColorStop(0,'#102f91');sky.addColorStop(.55,'#1e72d7');sky.addColorStop(1,'#42c7e6');ctx.fillStyle=sky;ctx.fillRect(0,0,w,h);for(let side=0;side<4;side++){const x0=side*w/4;ctx.fillStyle=side%2?'#62d6ee16':'#081c7418';ctx.fillRect(x0,0,w/4,yGround);ctx.strokeStyle='#b7efff30';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(x0,0);ctx.lineTo(x0,yGround);ctx.stroke();}for(let i=0;i<80;i++){const x=(i*97+(yaw*w*1.5))%w,y=(i*53)%Math.max(1,yGround-30);ctx.fillStyle=i%9===0?'#d9ff65':'#dcf7ff';ctx.globalAlpha=.16+(i%5)*.07;ctx.fillRect(x,y,3+(i%3),3+(i%2));}for(let i=0;i<9;i++){const x=((i*147+yaw*w*2)% (w+180))-90,y=110+(i%4)*62;ctx.globalAlpha=.14;ctx.fillStyle=i%2?'#d4f8ff':'#b7dcff';ctx.fillRect(x,y,110,18);ctx.fillRect(x+24,y-12,48,18);ctx.fillRect(x+66,y+7,38,12);}ctx.globalAlpha=1;ctx.fillStyle='#16326f';ctx.fillRect(0,yGround,w,h-yGround);for(let x=0;x<w;x+=28){ctx.fillStyle=(x/28)%2?'#244990':'#2e5eaa';ctx.fillRect(x,yGround+9,22,9);ctx.fillStyle='#8ce8e8';ctx.fillRect(x+4,yGround+2,12,5);}const cellSize=34,baseX=w/2-cellSize/2,baseY=yGround-4;ctx.fillStyle='#9ff2ff';ctx.strokeStyle='#143879';ctx.lineWidth=3;ctx.fillRect(baseX-cellSize*3,baseY,cellSize*7,15);ctx.strokeRect(baseX-cellSize*3,baseY,cellSize*7,15);for(const cell of v3GroundState.tower){const x=baseX+cell.x*cellSize,y=baseY-(cell.y+1)*cellSize;ctx.fillStyle=cell.color||'#70dcef';ctx.fillRect(x,y,cellSize-3,cellSize-3);ctx.strokeStyle='#122f72';ctx.strokeRect(x,y,cellSize-3,cellSize-3);}if(v3GroundState.active){const piece=v3PieceById(v3GroundState.active.id),cells=v3HomeCells();for(const cell of cells){const x=baseX+cell.x*cellSize,y=baseY-(cell.y+1)*cellSize;ctx.fillStyle=piece.color;ctx.fillRect(x,y,cellSize-3,cellSize-3);ctx.strokeStyle='#fff5ad';ctx.strokeRect(x,y,cellSize-3,cellSize-3);}}ctx.globalAlpha=1;v3HomeFrameId=requestAnimationFrame(v3DrawHome);}
+function v3HomeSync(){v3HomePanel.querySelector('#v3-home-record').textContent=`已通关 ${v3GroundState.cleared||0} 关`;v3HomePanel.querySelector('#v3-home-gift-count').textContent=`地面 ${v3GroundState.settled||0} 格 · 待放 ${v3GroundState.queue.length+(v3GroundState.active?1:0)} 块`;const active=v3GroundState.active;v3HomePanel.querySelector('#v3-home-piece-label').textContent=active?`获得：${v3PieceById(active.id).name} · 调整位置后放下`:'通关后获得普通方块';v3HomePanel.querySelector('#v3-home-status').textContent=v3HomeMessage||(active?'至少一格落在矩形地基上即可继续搭建':'完成排行关卡后，获得一块普通方块');}
+v3ReadGroundState();v3ReconcileRankGifts();v3HomeSync();v3HomeFrameId=requestAnimationFrame(v3DrawHome);
+I('v3-home-start').onclick=()=>I('start').click();I('v3-home-left').onclick=()=>v3HomeMove(-1);I('v3-home-right').onclick=()=>v3HomeMove(1);I('v3-home-rotate').onclick=()=>v3HomeRotate();I('v3-home-drop').onclick=()=>v3HomeDrop();I('v3-home-rank').onclick=()=>{const score=Number(L?.score||0);I('v3-home-status').textContent=score?`当前排行分 ${score} · 完成更多关卡领取方块`:'排行榜将在首次通关后记录分数';};
+addEventListener('keydown',event=>{if(v3HomeOverlay.hidden||v3HomeOverlay.dataset.home!=='true'||v3HomePanel.hidden)return;if(['ArrowLeft','a','ArrowRight','d','ArrowUp','w',' ','Enter'].includes(event.key)){event.preventDefault();if(event.key==='ArrowLeft'||event.key==='a')v3HomeMove(-1);else if(event.key==='ArrowRight'||event.key==='d')v3HomeMove(1);else if(event.key==='ArrowUp'||event.key==='w')v3HomeRotate();else v3HomeDrop();}});
 // Pause controls reuse the existing catalogue and audio engine.
 const pauseCodex=document.createElement('button');pauseCodex.id='pause-codex';pauseCodex.type='button';pauseCodex.textContent='图鉴';pauseCodex.setAttribute('aria-haspopup','dialog');pauseCodex.setAttribute('aria-controls','v3-codex');
 pauseCodex.onclick=()=>rotationCodex.open(pauseCodex);
