@@ -71,6 +71,17 @@ function liteSync(){
   I('growth-summary').hidden=true;
 }
 const liteOriginalD3=d3;
+const liteOriginalCompact=$r;
+$r=function(event,reduced=false){
+  const animation=liteOriginalCompact(event,reduced);
+  if(event.liteHeavyFall){animation.liteHeavyFall=true;animation.fallen=event.fallen||[];animation.duration=reduced?.2:.72;}
+  return animation;
+};
+function liteDrawHeavyFall(draw){
+  if(!k0?.liteHeavyFall)return;
+  const progress=R6(Math.min(1,k0.t/k0.duration));
+  for(const cell of k0.fallen)draw({...cell,liteEffect:'heavy'},cell.x,cell.y+(cell.toY-cell.y)*progress,0,1,0);
+}
 d3=function(...args){
   const heavyEvents=L.events.filter(e=>e.kind==='special'&&e.heavyBoost);
   const events=L.events.filter(e=>['lite-drop','lite-buy','lite-special','lite-tool-choice','lite-extra-tool','lite-reward-enter','stage-start','lite-precise','v3-unused-buff-trigger'].includes(e.kind));const result=liteOriginalD3(...args);
@@ -142,7 +153,7 @@ function liteShowCoinReward(amount,anchor){
 Of=function(scoring,cells=[]){
   const lastIds=new Set(L.lite.lastPlacementIds||[]),placed=cells.filter(c=>lastIds.has(c.id));
   const anchor=(placed.length?placed:cells).reduce((last,c)=>!last||c.id>last.id?c:last,null)||{x:0,y:0,type:'O'};
-  const materialColors={column:'#63d9ff',blast:'#ff9658',trim:'#a6ee58',patch:'#ff96bf',pack:'#ae8bff',heavy:'#b6c9de'};
+  const materialColors={column:'#63d9ff',blast:'#ff9658',trim:'#a6ee58',patch:'#ff96bf',pack:'#ae8bff',heavy:'#b6c9de',diamond:'#a6f4ff'};
   const color=materialColors[anchor.liteEffect]||'#'+(i9[anchor.color||anchor.type]||i9.O).toString(16).padStart(6,'0');
   const combo=Math.max(scoring.chain||1,scoring.streak||1),words=['','','二','三','四','五','六','七','八','九','十'];
   liteClearBurst(cells,anchor,color,combo);
@@ -150,7 +161,7 @@ Of=function(scoring,cells=[]){
   const box=I('score-feedback'),number=I('feedback-points');
   c3={t:0,duration:zt?1.25:1.65,anchor:{x:anchor.x,y:anchor.y},combo};scorePopupPulse=null;
   box.hidden=false;box.dataset.tier=combo>=3?'burst':combo>1?'chain':'normal';box.style.setProperty('--score-color',color);
-  I('feedback-title').textContent=title;box.dataset.heavy=String(!!scoring.heavyCellCount);I('feedback-multiplier').textContent=scoring.heavyCellCount?`超重 ${scoring.heavyCellCount} 格 · 最高 ×${scoring.heavyMaxMultiplier}`:'';I('feedback-detail').textContent='';
+  I('feedback-title').textContent=title;box.dataset.heavy=String(!!scoring.heavyCellCount);I('feedback-multiplier').textContent=scoring.heavyCellCount?`钻石 ${scoring.heavyCellCount} 格 · 最高 ×${scoring.heavyMaxMultiplier}`:'';I('feedback-detail').textContent='';
   if(scoring.coinReward)liteShowCoinReward(scoring.coinReward,anchor);
   number.textContent=`+${Ne(scoring.points)}`;number.style.removeProperty('transform');delete number.dataset.scorePulse;
   number.style.fontSize=(combo>=3?66:combo>1?60:52)+'px';
@@ -517,7 +528,7 @@ function liteSyncHeavyMarkers(){
     node.style.left=(p.x+1)*Ge.w/2+'px';node.style.top=Ge.top+(1-p.y)*Ge.playHeight/2+'px';node.style.fontSize=Math.max(6,Math.min(10,width/(node.textContent.length*.65)))+'px';
   }
 }
-function liteFrame(){if(he){liteSyncHeavyMarkers();liteUpdateRevive();liteUpdateCompletion(performance.now());liteSync();litePlayPendingAcquisition();if(L.lite.roll?.adReadyAt){if(L.liteFinishRewardAd()){d3();liteUpdateReward();liteSaveSafe();se.play('turn');}else liteUpdateRefresh();}}}
+function liteFrame(){if(he){v3RecordScore();liteSyncHeavyMarkers();liteUpdateRevive();liteUpdateCompletion(performance.now());liteSync();litePlayPendingAcquisition();if(L.lite.roll?.adReadyAt){if(L.liteFinishRewardAd()){d3();liteUpdateReward();liteSaveSafe();se.play('turn');}else liteUpdateRefresh();}}}
 // Deterministic fixture access is only present with the explicit QA query flag.
 if(new URLSearchParams(location.search).has('qa')){
   window.__liteQA={game:L,action:H6,specialVisuals:()=>liteBlockFx.snapshot(),refresh:()=>{H3=-1;V3();d3();Qt();},get paused(){return G0;},set paused(value){G0=value;},set naturalFall(value){liteNaturalFall=value;},get busy(){return !!k0||Ie.busy||!!pe.particles.length||me.active;},screenCell(x,y){const rect=I('stage').getBoundingClientRect(),p=new U(x,y,0).project(Bt);return{x:rect.left+I('stage').clientLeft+(p.x+1)*Ge.w/2,y:rect.top+I('stage').clientTop+Ge.top+(1-p.y)*Ge.playHeight/2};},start(){ka(true);},settle(){for(let i=0;i<100;i++){if(L.phase==='rotating')L.finishRotation();else if(L.phase==='clearing')L.finishClear();else if(L.phase==='settling')L.finishSettlement();else break;}L.events=[];k0=null;Ie.reset();pe.reset();V3();Qt();},renderer:de};
@@ -535,3 +546,26 @@ if(new URLSearchParams(location.search).has('qa')){
   };
   Object.defineProperty(window,'__THREE_GAME_DIAGNOSTICS__',{get(){return {phase:L.phase,level:L.stage+1,renderer:{calls:de.info.render.calls,triangles:de.info.render.triangles,geometries:de.info.memory.geometries,textures:de.info.memory.textures},dpr:de.getPixelRatio()};}});
 }
+/* Lobby handoff and deterministic preview. The selected difficulty is passed into the live V3 rules. */
+const v3Overlay=I('overlay'),v3Dialog=v3Overlay.querySelector('.dialog');
+const v3Loading=document.createElement('section');v3Loading.id='v3-lobby-loading';v3Loading.className='v3-lobby-loading';v3Loading.hidden=true;v3Loading.setAttribute('aria-live','polite');v3Loading.innerHTML='<div class="v3-load-particles" aria-hidden="true">'+Array.from({length:10},()=>'<i></i>').join('')+'</div><div><div class="v3-loading-mark">正在装载方块</div><p class="v3-loading-copy">旋轴、轮廓与天空盒准备中…</p><div class="v3-loading-track" role="progressbar" aria-label="加载进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="v3-loading-bar"></div></div></div>';
+v3Dialog.append(v3Loading);
+const v3Lobby=document.createElement('section');v3Lobby.id='v3-lobby';v3Lobby.className='v3-lobby';v3Lobby.hidden=true;v3Lobby.setAttribute('aria-labelledby','v3-lobby-title');v3Lobby.innerHTML='<header class="v3-lobby-head"><div><p class="v3-lobby-kicker">ROTATION V3 · 主大厅</p><h2 id="v3-lobby-title">旋轴大厅</h2></div><span class="v3-lobby-tag" id="v3-difficulty-tag">普通 · 钻石轮廓</span></header><figure class="v3-lobby-preview"><canvas id="v3-lobby-canvas" width="680" height="500" aria-label="旋轴演示"></canvas><figcaption id="v3-lobby-caption">固定演示 · 填满轮廓后旋转消除</figcaption></figure><div class="v3-difficulty" role="group" aria-label="难度选择"><button type="button" data-diff="easy" aria-pressed="false">简单<small>正方形 · 轻松</small></button><button type="button" data-diff="normal" aria-pressed="true">普通<small>钻石 · 标准</small></button><button type="button" data-diff="hard" aria-pressed="false">困难<small>皇冠 · 挑战</small></button></div><div class="v3-lobby-actions"><button type="button" class="v3-lobby-start" id="v3-lobby-start">开始挑战</button><button type="button" class="v3-rank-open" id="v3-rank-open">排行榜</button></div><p class="v3-lobby-note">每种难度独立记录通关分数 · 当前包体为普通难度</p><section class="v3-rank-panel" id="v3-rank-panel" hidden aria-label="排行榜"><header class="v3-rank-head"><h3>排行榜 · <span id="v3-rank-title">普通</span></h3><button type="button" class="v3-rank-close" id="v3-rank-close" aria-label="关闭排行榜">×</button></header><div class="v3-rank-list" id="v3-rank-list"></div><p class="v3-rank-foot" id="v3-rank-foot"></p></section>';
+v3Dialog.append(v3Lobby);
+const v3Ctx=I('v3-lobby-canvas').getContext('2d');let v3LobbyRaf=0,v3LobbyStart=0,v3Difficulty='normal',v3RunToken=0,v3RecordedRun=0;
+const v3DiffInfo={easy:{label:'简单',shape:'正方形',sky:['#1758ed','#26c8ee'],outline:[[-1,-1],[0,-1],[1,-1],[-1,0],[0,0],[1,0],[-1,1],[0,1],[1,1]],goals:[36,64,96,144,192]},normal:{label:'普通',shape:'钻石',sky:['#092f9c','#16a8dd'],outline:[[-1,-1],[0,-1],[1,-1],[-1,0],[1,0],[-1,1],[0,1],[1,1]],goals:[45,80,120,180,240]},hard:{label:'困难',shape:'皇冠',sky:['#351078','#a842c8'],outline:[[-3,0],[-3,1],[-2,1],[-2,2],[-1,1],[-1,3],[0,1],[0,2],[1,3],[1,1],[2,2],[2,1],[3,1],[3,0]],goals:[61,108,162,243,324]}};
+const v3Pieces=[[[0,0],[1,0],[0,1]],[[0,0],[1,0],[2,0]],[[0,0],[0,1],[1,1]],[[0,0],[1,0],[1,1]]];
+function v3Hex(hex){const n=parseInt(hex.slice(1),16);return [n>>16&255,n>>8&255,n&255];}
+function v3Lerp(a,b,t){return Math.round(a+(b-a)*t)}
+function v3DrawLobby(now){if(v3Lobby.hidden)return;const dt=(now-v3LobbyStart)/1000,phase=dt%3.3,info=v3DiffInfo[v3Difficulty],w=v3Ctx.canvas.width,h=v3Ctx.canvas.height;const grad=v3Ctx.createLinearGradient(0,0,w,h),a=v3Hex(info.sky[0]),b=v3Hex(info.sky[1]);grad.addColorStop(0,info.sky[0]);grad.addColorStop(1,info.sky[1]);v3Ctx.fillStyle=grad;v3Ctx.fillRect(0,0,w,h);for(let i=0;i<40;i++){const x=(i*83+Math.floor(dt*8+i*9))%w,y=(i*47)%h;v3Ctx.fillStyle=i%7===0?'#d6ff4f':'#b9eaff';v3Ctx.globalAlpha=.23+(i%5)*.1;v3Ctx.fillRect(x,y,5+(i%3)*2,5+(i%2)*2)}v3Ctx.globalAlpha=1;const scale=35,cx=w/2,cy=h/2+12;const cell=(x,y,color,alpha=1)=>{v3Ctx.globalAlpha=alpha;v3Ctx.fillStyle=color;v3Ctx.fillRect(cx+x*scale-scale/2,cy-y*scale-scale/2,scale-3,scale-3);v3Ctx.strokeStyle='#183373';v3Ctx.lineWidth=3;v3Ctx.strokeRect(cx+x*scale-scale/2,cy-y*scale-scale/2,scale-3,scale-3)};v3Ctx.setLineDash([7,6]);v3Ctx.lineWidth=3;v3Ctx.strokeStyle='#eaff8a';v3Ctx.beginPath();for(const [x,y] of info.outline){v3Ctx.rect(cx+x*scale-scale/2,cy-y*scale-scale/2,scale-3,scale-3)}v3Ctx.stroke();v3Ctx.setLineDash([]);const p=v3Pieces[Math.floor(dt/3.3)%v3Pieces.length],progress=Math.min(1,phase/.92),dropY=Math.round(5-progress*5);for(const [x,y] of p)cell(x,dropY+y,['#ffd24b','#a1f04b','#ff6f9b','#9a83ff'][Math.floor(dt/3.3)%4]);const rotating=phase>=1.5&&phase<2.35,angle=rotating?(phase-1.5)/.85*Math.PI/2:0,settled=phase>.92&&phase<2.35;const settledCell=(x,y,color,alpha=1)=>{const co=Math.cos(angle),si=Math.sin(angle);cell(x*co-y*si,x*si+y*co,color,alpha)};if(settled)for(const [x,y] of info.outline)settledCell(x,y,['#ffcc49','#77e96b','#59d9f1','#ff799b'][(x+y+Math.floor(dt*2))%4]);if(phase>=2.35){const fade=Math.max(0,1-(phase-2.35)/.8);for(const [x,y] of info.outline)cell(x,y,['#ffcc49','#77e96b','#59d9f1','#ff799b'][(x+y+Math.floor(dt*2))%4],fade)}v3Ctx.globalAlpha=1;v3LobbyRaf=requestAnimationFrame(v3DrawLobby)}
+function v3SetDifficulty(diff){if(!v3DiffInfo[diff])return;v3Difficulty=diff;const info=v3DiffInfo[diff];v3Lobby.querySelectorAll('[data-diff]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.diff===diff)));I('v3-difficulty-tag').textContent=`${info.label} · ${info.shape}轮廓`;I('v3-lobby-caption').textContent=`${info.shape}轮廓 · 第1关目标 ${info.goals[0]} 分`;I('v3-rank-title').textContent=info.label;v3RenderRanks();}
+function v3ReadRanks(){const info=v3DiffInfo[v3Difficulty],key='rotationV3LeaderboardV1';let data;try{data=JSON.parse(localStorage.getItem(key)||'{}')}catch{data={}}let scores=Array.isArray(data[v3Difficulty])?data[v3Difficulty].filter(Number.isFinite):[];if(!scores.length)scores=info.goals.map((goal,i)=>goal+36+(4-i)*12).concat([info.goals.at(-1)+12,info.goals.at(-1),info.goals.at(-1)-12,info.goals.at(-1)-24,info.goals.at(-1)-36]);return {data,key,scores};}
+function v3RecordScore(){if(!L?.lite||L.phase!=='won'||v3RecordedRun===v3RunToken)return;const score=Number(L.score);if(!Number.isFinite(score)||score<=0)return;const {data,key,scores}=v3ReadRanks();data[v3Difficulty]=[...scores,score].sort((a,b)=>b-a).slice(0,10);try{localStorage.setItem(key,JSON.stringify(data));v3RecordedRun=v3RunToken}catch{}}
+function v3RenderRanks(){const info=v3DiffInfo[v3Difficulty],list=I('v3-rank-list'),foot=I('v3-rank-foot'),{scores}=v3ReadRanks();const current=Number(Qe?.game?.score||0);const rank=current>0?1+scores.filter(s=>s>current).length:null;list.innerHTML=scores.map((s,i)=>`<div class="v3-rank-row"><span>${i+1}</span><span>玩家 ${String.fromCharCode(65+i)}</span><b>${s}</b></div>`).join('');foot.textContent=rank?`当前分数 ${current} · 超过 ${Math.max(0,Math.round((1-rank/Math.max(1,scores.length+1))*100))}% 玩家`:'完成一局后显示你的排名';}
+const v3OriginalHomeStart=I('start').onclick;let v3LoadingTimer=0;
+function v3OpenLobby(){if(v3LoadingTimer)return;v3Overlay.classList.add('v3-loading-active');v3Loading.hidden=false;I('start').hidden=true;const bar=v3Loading.querySelector('.v3-loading-bar'),track=v3Loading.querySelector('.v3-loading-track');let value=0;const tick=()=>{value=Math.min(100,value+1.7);bar.style.width=value+'%';track.setAttribute('aria-valuenow',String(value));if(value<100){v3LoadingTimer=requestAnimationFrame(tick)}else{v3LoadingTimer=0;setTimeout(()=>{v3Overlay.classList.remove('v3-loading-active');v3Loading.hidden=true;v3Overlay.classList.add('v3-lobby-active');v3Lobby.hidden=false;v3SetDifficulty('normal');v3LobbyStart=performance.now();cancelAnimationFrame(v3LobbyRaf);v3LobbyRaf=requestAnimationFrame(v3DrawLobby)},120)}};v3LoadingTimer=requestAnimationFrame(tick)}
+I('start').onclick=event=>{if(v3Overlay.classList.contains('v3-lobby-active')||v3LoadingTimer){return}v3OpenLobby()};
+v3Lobby.querySelectorAll('[data-diff]').forEach(button=>button.addEventListener('click',()=>v3SetDifficulty(button.dataset.diff)));
+I('v3-rank-open').onclick=()=>{I('v3-rank-panel').hidden=false;v3RenderRanks()};I('v3-rank-close').onclick=()=>{I('v3-rank-panel').hidden=true};
+I('v3-lobby-start').onclick=event=>{cancelAnimationFrame(v3LobbyRaf);v3Lobby.hidden=true;v3Overlay.classList.remove('v3-lobby-active');v3Overlay.classList.remove('v3-loading-active');v3Overlay.dataset.home='true';I('start').hidden=false;L.lite.difficulty=v3Difficulty;v3RunToken++;v3RecordedRun=0;try{localStorage.setItem('rotationV3DifficultyV1',v3Difficulty)}catch{};v3OriginalHomeStart?.call(I('start'),event)};
+try{const stored=localStorage.getItem('rotationV3DifficultyV1');if(v3DiffInfo[stored])v3Difficulty=stored}catch{};
