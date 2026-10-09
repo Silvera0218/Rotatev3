@@ -4,7 +4,7 @@ globalThis.createLiteBlockEffects=function(scene,THREE,capacity,dirty){
   for(const block of ROTATION_LITE.specials){
     const img=new Image(),texture=new THREE.Texture(img);
     texture.magFilter=texture.minFilter=1003;texture.generateMipmaps=false;texture.colorSpace='srgb';
-    const glass=block.id==='column'||block.id==='diamond',metal=block.id==='heavy';
+    const glass=block.id==='column',metal=block.id==='heavy';
     const material=new THREE.MeshStandardMaterial({map:texture,roughness:glass?.18:metal?.4:.9,metalness:metal?.28:0,transparent:glass,opacity:glass?.88:1,alphaTest:.1});
     const mesh=new THREE.InstancedMesh(new THREE.BoxGeometry(.96,.96,.36),material,capacity);mesh.count=0;mesh.frustumCulled=false;scene.add(mesh);
     const layer={mesh,count:0};layers.set(block.id,layer);

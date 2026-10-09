@@ -8,8 +8,7 @@
     {id:'trim',name:'修枝方块',description:'落地后，消除虚线区域外的所有方块'},
     {id:'patch',name:'金币方块',description:'消除时，按本次消除格数获得金币',detail:'落地后保留金币标记。消除时，每个金币格获得等同于本批消除格数的金币；多个金币格分别触发。铲除或重排消耗不发金币。'},
     {id:'pack',name:'强迫症方块',description:'落地后，消耗自身将其余方块向内重排'},
-    {id:'heavy',name:'超重方块',description:'各格独自落到底，落空不扣生命',detail:'落地后，各格分别向下落到被挡住，落出棋盘不扣生命。全部落稳后，再按留下方块的位置旋转转轴。'},
-    {id:'diamond',name:'钻石方块',description:'落地时，同色格倍率增加同色数量',detail:'落地时，统计棋盘上与它同色的格数N（含自身），这些格的得分倍率增加N，基础倍率为1。再次触发可累加；后来新增的格子不追溯。倍率跟随格子移动、旋转和变色，消除时生效。'}
+    {id:'heavy',name:'超重方块',description:'落地时，同色格倍率增加同色数量×3',detail:'落地时，统计棋盘上与它同色的格数N（含自身），这些格的得分倍率增加3×N，基础倍率为1。再次触发可累加；后来新增的格子不追溯。倍率跟随格子移动、旋转和变色，消除时生效。'}
   ];
   const RULES = Object.freeze({
     levels: 5, scoreGoals: [45,80,120,180,240],
@@ -27,35 +26,6 @@
     specials: SPECIALS,
     rewardRoutes: [{id:'tool',name:'道具补给'}]
   });
-  // Difficulty is numeric first: normal keeps the current package values.
-  // The outline is a readable visual cue for the same setting.
-  const DIFFICULTIES = Object.freeze({
-    easy: Object.freeze({
-      label: '简单',
-      scoreGoals: Object.freeze([36, 64, 96, 144, 192]),
-      outline: Object.freeze([
-        {x:-1,y:-1},{x:0,y:-1},{x:1,y:-1},
-        {x:-1,y:0},{x:0,y:0},{x:1,y:0},
-        {x:-1,y:1},{x:0,y:1},{x:1,y:1}
-      ])
-    }),
-    normal: Object.freeze({
-      label: '普通',
-      scoreGoals: RULES.scoreGoals,
-      outline: null
-    }),
-    hard: Object.freeze({
-      label: '困难',
-      scoreGoals: Object.freeze([61, 108, 162, 243, 324]),
-      outline: Object.freeze([
-        {x:-3,y:0},{x:-3,y:1},{x:-2,y:1},{x:-2,y:2},
-        {x:-1,y:1},{x:-1,y:3},{x:0,y:1},{x:0,y:2},
-        {x:1,y:3},{x:1,y:1},{x:2,y:2},{x:2,y:1},
-        {x:3,y:1},{x:3,y:0}
-      ])
-    })
-  });
-  root.ROTATION_LITE_DIFFICULTIES = DIFFICULTIES;
   root.ROTATION_LITE = RULES;
 
   const colorKey = cell => `${cell.x},${cell.y}`;
@@ -202,7 +172,7 @@
     p.liteGrantBuff = () => false;
     p.liteBuffText = () => ({text:'',parts:[],stacks:0,progress:'',progressParts:[]});
     p.liteBuffProgress = () => '';
-    p.litePreventMiss = cells => cells?.some(cell=>cell.liteEffect==='heavy')===true;
+    p.litePreventMiss = () => false;
     p.liteNeedsMilestone = () => false;
     p.liteComboNeedsChoice = () => false;
     p.liteAfterAttach = function (cells) {
@@ -221,7 +191,7 @@
       if(!cells.length)return null;
       const before=this.board.map(c=>({...c})),effect=landing.effect,color=cells[0].type;
       const inside=new Set(this.target.cells.map(colorKey));
-      let removed=[],scoring=null,moved=false,compact=false,repack=false,heavyBoost=null,fallen=[];
+      let removed=[],scoring=null,moved=false,compact=false,repack=false,heavyBoost=null;
       if(effect==='column'){
         const columns=new Set(cells.map(c=>c.x));
         for(const c of this.board)if(columns.has(c.x))c.type=color;
@@ -243,42 +213,27 @@
       }else if(effect==='pack'){
         removed=cells;this.board=this.board.filter(c=>!ids.has(c.id));compact=true;repack=true;
       }else if(effect==='heavy'){
-        // Resolve bottom cells first so stacked cells stop on their settled peers.
-        // Existing board cells and the axle stay fixed during this special fall.
-        const stationary=this.board.filter(cell=>!ids.has(cell.id));
-        const occupied=new Set(['0,0',...stationary.map(colorKey)]),survivors=[];
-        for(const cell of [...cells].sort((a,b)=>a.y-b.y||a.id-b.id)){
-          const from={...cell};let next={...cell,y:cell.y-1};
-          while(!occupied.has(colorKey(next))&&this.valid([next],[])){
-            cell.y=next.y;next={...cell,y:cell.y-1};
-          }
-          if(!occupied.has(colorKey(next))){fallen.push({...from,toY:next.y});moved=true;}
-          else{survivors.push(cell);occupied.add(colorKey(cell));moved ||= cell.y!==from.y;}
-        }
-        this.board=[...stationary,...survivors];
-      }else if(effect==='diamond'){
-        const targets=this.board.filter(cell=>cell.type===color),gain=targets.length;
+        const targets=this.board.filter(cell=>cell.type===color),gain=targets.length*3;
         for(const cell of targets)cell.liteHeavyBonus=(heavyMultiplier(cell)-1)+gain;
         heavyBoost={count:targets.length,gain,ids:targets.map(cell=>cell.id),maxMultiplier:Math.max(...targets.map(heavyMultiplier))};
       }
       // Landing powers are single use. Surviving cells keep their ordinary colour.
       for(const c of this.board)if(ids.has(c.id)){if(effect!=='patch')c.liteEffect=null;delete c.litePrismPending;}
-      const aliases={column:'column_dye',blast:'bomb',trim:'trim',patch:'stitch',pack:'pack',heavy:'relay',diamond:'gilded'};
+      const aliases={column:'column_dye',blast:'bomb',trim:'trim',patch:'stitch',pack:'pack',heavy:'gilded'};
       const landed=before.filter(c=>ids.has(c.id)),contact={x:landed.reduce((n,c)=>n+c.x,0)/landed.length,y:landed.reduce((n,c)=>n+c.y,0)/landed.length};
       this.events.push({kind:'special',effect:aliases[effect],liteEffect:effect,cells:landed,contact,removed,scoring,heavyBoost});
-      if(moved)this.events.push({kind:'compact',before,liteHeavyFall:effect==='heavy',fallen});
+      if(moved)this.events.push({kind:'compact',before});
       this.build.revision++;
-      return {compact,repack,moved,scoring,retainTorque:effect==='column',torqueCells:effect==='heavy'?this.board.filter(cell=>ids.has(cell.id)):null};
+      return {compact,repack,moved,scoring,retainTorque:effect==='column'};
     };
     p.liteRandom = function () {
       this.lite.seed = (Math.imul(this.lite.seed, 1664525) + 1013904223) >>> 0;
       return this.lite.seed / 4294967296;
     };
     p.reset = function (shapeSeed = 42, rewardSeed = shapeSeed) {
-      const difficulty = this.lite?.difficulty && DIFFICULTIES[this.lite.difficulty] ? this.lite.difficulty : 'normal';
       this.lite = {
         toolOrder: ['shovel','swap'], coins: 0, tools: { ...emptyTools(), shovel: 1, swap: 1 }, shopPurchases: {}, extraDrops: 0, buffs: [], specials: [], specialToolsMigrated:true, lastPlacementIds: [], clears: 0,
-        roll: null, clearCoinStage:-1, seed: (rewardSeed ^ 0x6a09e667) >>> 0, difficulty
+        roll: null, clearCoinStage:-1, seed: (rewardSeed ^ 0x6a09e667) >>> 0
       };
       const result = original.reset.call(this, shapeSeed, rewardSeed);
       this.pixelCards = {};
@@ -292,15 +247,9 @@
       return result;
     };
     Object.defineProperty(p, 'target', { configurable: true, get() {
-      const base = originalTarget.call(this);
-      const setting = DIFFICULTIES[this.lite?.difficulty || 'normal'] || DIFFICULTIES.normal;
-      if (!setting.outline) return base;
-      return {...base, name: setting.label, cells: setting.outline.map(cell => ({...cell}))};
+      return originalTarget.call(this);
     } });
-    Object.defineProperty(p, 'goal', { configurable: true, get() {
-      const setting = DIFFICULTIES[this.lite?.difficulty || 'normal'] || DIFFICULTIES.normal;
-      return setting.scoreGoals[this.stage] ?? this.target.goals[0];
-    } });
+    Object.defineProperty(p, 'goal', { configurable: true, get() { return RULES.scoreGoals[this.stage] ?? this.target.goals[0]; } });
     Object.defineProperty(p, 'dropLimit', { configurable: true, get() {
       const base=this.stage<RULES.lateDropStart?RULES.dropLimit:RULES.lateDropBase+(this.stage-RULES.lateDropStart)*RULES.lateDropStep;
       return (this.endless?Math.max(base,originalDropLimit.call(this)):base) + (this.lite?.extraDrops || 0);
@@ -538,8 +487,7 @@
     p.liteNextStageInfo = function () {
       const stage=this.stage+1;
       if(!this.endless&&stage>=RULES.levels)return {stage:RULES.levels-1,won:true,goal:null};
-      const setting = DIFFICULTIES[this.lite?.difficulty || 'normal'] || DIFFICULTIES.normal;
-      return {stage,won:false,goal:setting.scoreGoals[stage]??originalTarget.call({...this,stage,outline:null}).goals[0]};
+      return {stage,won:false,goal:RULES.scoreGoals[stage]??originalTarget.call({...this,stage,outline:null}).goals[0]};
     };
     p.liteNext = function () {
       if (!rewardPhase(this) || !this.lite.roll?.entered || !this.lite.roll.settled) return false;

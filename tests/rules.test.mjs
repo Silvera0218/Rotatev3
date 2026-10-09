@@ -358,17 +358,11 @@ test('revive cannot claim early, from play, after restart or with an old stage t
  const g=make();assert.equal(g.liteStartReviveAd(0),false);g.fail('test');g.liteStartReviveAd(0);g.stage++;assert.equal(g.liteFinishReviveAd(3000),false);g.reset();assert.equal(g.liteFinishReviveAd(3000),false);assert.equal(g.lite.extraDrops,0);
 });
 
-test('V3 has no Buff gains or growth and exposes the current tool set',()=>{
- const g=make();assert.equal(ctx.ROTATION_LITE.buffs.length,0);assert.equal(ctx.ROTATION_LITE.tools.length,12);assert.equal(ctx.ROTATION_LITE.specials.length,7);
+test('V3 has only five tools and six materials, with no Buff gains or growth',()=>{
+ const g=make();assert.equal(ctx.ROTATION_LITE.buffs.length,0);assert.equal(ctx.ROTATION_LITE.tools.length,11);assert.equal(ctx.ROTATION_LITE.specials.length,6);
  g.lite.buffs=['extra-moves','loose-outline','tool-echo'];g.lite.growth={training:4};g.lite.milestones=[{stage:2}];g.liteEnsureExpansion();
  assert.equal(g.lite.buffs.length,0);assert.equal(g.lite.growth,undefined);assert.equal(g.lite.milestones,undefined);assert.equal(g.dropLimit,24);assert.equal(g.liteGrantBuff('extra-moves'),false);assert.equal(g.liteBuffStacks('extra-moves'),0);assert.equal(g.liteNeedsMilestone(),false);assert.equal(g.liteComboNeedsChoice(),false);
  assert.equal(typeof g.liteRoll,'undefined');assert.equal(typeof g.liteGamble,'undefined');assert.equal(typeof g.liteRest,'undefined');
-});
-test('difficulty uses numeric goals and distinct outlines while normal keeps the current package',()=>{
- const g=make();assert.equal(g.lite.difficulty,'normal');assert.equal(g.goal,45);assert.equal(g.target.cells.length,8);
- g.lite.difficulty='easy';assert.equal(g.goal,36);assert.equal(g.target.cells.length,9);
- g.lite.difficulty='hard';assert.equal(g.goal,61);assert.equal(g.target.cells.length,14);
- g.lite.difficulty='normal';assert.equal(g.goal,45);assert.equal(g.target.cells.length,8);
 });
 test('every reward gives three unique mixed choices and persists without reroll',()=>{
  for(let seed=0;seed<40;seed++){
@@ -491,11 +485,11 @@ test('pack consumes its own piece and uses the original reference central repack
  assert.deepEqual(Array.from(g.board,c=>[c.id,c.x,c.y,c.type]),Array.from(expected.board,c=>[c.id,c.x,c.y,c.type]));
  assert.equal(g.phase,'settling');settle(g);assert.equal(g.phase,'play');assert.equal(g.dropsUsed,1);
 });
-test('diamond boosts only the same-colour landing snapshot and stacks on repeat',()=>{
+test('heavy boosts only same-colour landing snapshot, includes itself, and stacks on repeat',()=>{
  const g=make();g.board=[[-1,0,'L'],[1,0,'L'],[2,0,'L'],[4,0,'T']].map(([x,y,type])=>({x,y,type,id:g.id++}));
- piece(g,[[0,1]],'diamond');g.resolvePendingSpecial();const first=g.board.filter(c=>c.type==='L');assert(first.every(c=>c.liteHeavyBonus===4));assert.equal(g.board.find(c=>c.type==='T').liteHeavyBonus,undefined);
+ piece(g,[[0,1]],'heavy');g.resolvePendingSpecial();const first=g.board.filter(c=>c.type==='L');assert(first.every(c=>c.liteHeavyBonus===12));assert.equal(g.board.find(c=>c.type==='T').liteHeavyBonus,undefined);
  const later={x:3,y:1,type:'L',id:g.id++};g.board.push(later);assert.equal(later.liteHeavyBonus,undefined);
- piece(g,[[4,1]],'diamond');g.resolvePendingSpecial();assert(first.every(c=>c.liteHeavyBonus===10));assert.equal(later.liteHeavyBonus,6);assert.equal(g.events.filter(e=>e.kind==='turn').length,0);
+ piece(g,[[4,1]],'heavy');g.resolvePendingSpecial();assert(first.every(c=>c.liteHeavyBonus===30));assert.equal(later.liteHeavyBonus,18);assert.equal(g.events.filter(e=>e.kind==='turn').length,0);
 });
 test('heavy score weights base and each own colour bonus without boosting other colours',()=>{
  // SymPy: (4+4)*13+(4+4)=112; (5+8)*(2*13+3)/5=75.4 ->75.
