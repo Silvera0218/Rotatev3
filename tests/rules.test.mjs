@@ -358,8 +358,8 @@ test('revive cannot claim early, from play, after restart or with an old stage t
  const g=make();assert.equal(g.liteStartReviveAd(0),false);g.fail('test');g.liteStartReviveAd(0);g.stage++;assert.equal(g.liteFinishReviveAd(3000),false);g.reset();assert.equal(g.liteFinishReviveAd(3000),false);assert.equal(g.lite.extraDrops,0);
 });
 
-test('V3 has only five tools and six materials, with no Buff gains or growth',()=>{
- const g=make();assert.equal(ctx.ROTATION_LITE.buffs.length,0);assert.equal(ctx.ROTATION_LITE.tools.length,11);assert.equal(ctx.ROTATION_LITE.specials.length,6);
+test('V3 has only five tools and seven special blocks, with no Buff gains or growth',()=>{
+ const g=make();assert.equal(ctx.ROTATION_LITE.buffs.length,0);assert.equal(ctx.ROTATION_LITE.tools.length,12);assert.equal(ctx.ROTATION_LITE.specials.length,7);assert(ctx.ROTATION_LITE.specials.some(block=>block.id==='diamond'));
  g.lite.buffs=['extra-moves','loose-outline','tool-echo'];g.lite.growth={training:4};g.lite.milestones=[{stage:2}];g.liteEnsureExpansion();
  assert.equal(g.lite.buffs.length,0);assert.equal(g.lite.growth,undefined);assert.equal(g.lite.milestones,undefined);assert.equal(g.dropLimit,24);assert.equal(g.liteGrantBuff('extra-moves'),false);assert.equal(g.liteBuffStacks('extra-moves'),0);assert.equal(g.liteNeedsMilestone(),false);assert.equal(g.liteComboNeedsChoice(),false);
  assert.equal(typeof g.liteRoll,'undefined');assert.equal(typeof g.liteGamble,'undefined');assert.equal(typeof g.liteRest,'undefined');
@@ -498,6 +498,17 @@ test('heavy score weights base and each own colour bonus without boosting other 
  const mixed=Array.from({length:5},(_,x)=>({x,y:1,type:'L',id:x+1,liteHeavyBonus:x<2?12:0}));assert.equal(make().awardCells(mixed,'outline').points,75);
  const trim=make();trim.board=[{x:5,y:0,id:trim.id++,type:'L',liteHeavyBonus:12},{x:6,y:0,id:trim.id++,type:'T'}];assert.equal(land(trim,'trim').scoring.points,14);
 });
+test('diamond uses the same-colour count with a +1 per-cell multiplier gain',()=>{
+ const g=make();g.board=[[-1,0,'L'],[1,0,'L'],[2,0,'L'],[4,0,'T']].map(([x,y,type])=>({x,y,type,id:g.id++}));
+ piece(g,[[0,1]],'diamond');g.resolvePendingSpecial();
+ assert(g.board.filter(c=>c.type==='L').every(c=>c.liteHeavyBonus===4));
+ assert.equal(g.events.at(-1).heavyBoost.gain,4);
+});
+test('heavy drops each cell independently without losing a life, then starts the rotor turn',()=>{
+ const g=make();g.active.liteEffect='heavy';g.active.x=2;g.drop(true);
+ assert.equal(g.lives,3);assert.equal(g.dropsUsed,1);assert.equal(g.phase,'rotating');
+ assert.equal(g.events.filter(e=>e.heavyDrop).length,2);assert.equal(g.events.filter(e=>e.kind==='turn').length,1);
+});
 test('heavy and coin metadata follow rotations, repacks, dye and save reload; old extra turns are discarded',()=>{
  const g=make();g.board=[{x:1,y:0,id:g.id++,type:'L',liteHeavyBonus:12,liteCoin:true,liteEffect:'patch'},{x:-1,y:0,id:g.id++,type:'T'}];const id=g.board[0].id;
  g.beginRotation({dir:1,lever:-1});g.finishRotation();g.settleRemaining(true);const moved=g.board.find(c=>c.id===id);assert.equal(moved.liteHeavyBonus,12);assert.equal(moved.liteCoin,true);
@@ -520,7 +531,7 @@ test('all six tools transform a real falling piece, consume inventory, trigger o
  }
 });
 test('missing with a special piece never fires its landing power or consumes a drop',()=>{
- for(const {id} of ctx.ROTATION_LITE.specials){const g=make();g.active.x=8;g.active.liteEffect=id;g.drop();assert.equal(g.events.some(e=>e.kind==='special'),false);assert.equal(g.dropsUsed,0);assert.equal(g.lives,2);}
+ for(const {id} of ctx.ROTATION_LITE.specials){const g=make();g.active.x=8;g.active.liteEffect=id;g.drop();if(id==='heavy'){assert.equal(g.events.some(e=>e.heavyDrop),true);assert.equal(g.dropsUsed,1);assert.equal(g.lives,3);}else{assert.equal(g.events.some(e=>e.kind==='special'),false);assert.equal(g.dropsUsed,0);assert.equal(g.lives,2);}}
 });
 test('old V3 inventory and pending choices migrate to the six-item pool once without refreshing quotas',()=>{
  const g=make();g.lite.tools['block-spread']=3;g.active.liteEffect='prism';

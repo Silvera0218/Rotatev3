@@ -22,11 +22,12 @@ globalThis.createRotationCodex=function({config,makeGame,entry,onResume,onHome})
       const pos=[[0,1],[0,2]];
       const cells=pos.map(([x,y])=>({x,y,type:'L',id:g.id++,liteEffect:item.blockEffect}));from=clone(cells);g.board.push(...cells);before=clone(g.board);g.checkpointScore=100;g.score=100;g.levelScore=100;
       g.liteAfterAttach(cells);const result=g.resolvePendingSpecial();
+      if(item.blockEffect==='heavy')for(const cell of g.board)delete cell.liteHeavyBonus;
       if(result.compact)g.settleRemaining(result.repack===true);
       if(item.blockEffect==='heavy')mode='heavy';
       if(item.blockEffect==='patch'){mode='coin';const score=g.awardCells(g.board,'outline');note='消除 '+g.board.length+' 格 · 金币 +'+score.coinReward;g.board=[];}
       after=clone(g.board);to=after.filter(c=>cells.some(a=>a.id===c.id));removed=before.filter(c=>!after.some(a=>a.id===c.id));
-      const notes={column:'整列染成同色',blast:'本关 100 分 → 爆炸得分 +'+(result.scoring?.points||0),trim:'框外清除，框内保留',patch:note,pack:'向转轴中心重排',heavy:'同色 '+g.board.filter(c=>c.type==='L').length+' 格 · 倍率 +'+(g.board.filter(c=>c.type==='L').length*3)};note=notes[item.blockEffect];
+      const notes={column:'整列染成同色',blast:'本关 100 分 → 爆炸得分 +'+(result.scoring?.points||0),trim:'框外清除，框内保留',patch:note,pack:'向转轴中心重排',heavy:'每格分别下落到底 · 不扣生命',diamond:'同色 '+g.board.filter(c=>c.type==='L').length+' 格 · 每格倍率 +1'};note=notes[item.blockEffect];
     }else if(item.id==='shovel'){
       g.lite.lastPlacementIds=g.board.filter(c=>c.x>=2).map(c=>c.id);g.lite.tools.shovel=1;g.liteUseTool('shovel');after=clone(g.board);removed=before.filter(c=>!after.some(a=>a.id===c.id));note='移除上一次投放的方块';
     }else if(item.id==='dye'||item.id==='swap'){

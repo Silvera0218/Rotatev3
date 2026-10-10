@@ -8,7 +8,8 @@
     {id:'trim',name:'修枝方块',description:'落地后，消除虚线区域外的所有方块'},
     {id:'patch',name:'金币方块',description:'消除时，按本次消除格数获得金币',detail:'落地后保留金币标记。消除时，每个金币格获得等同于本批消除格数的金币；多个金币格分别触发。铲除或重排消耗不发金币。'},
     {id:'pack',name:'强迫症方块',description:'落地后，消耗自身将其余方块向内重排'},
-    {id:'heavy',name:'超重方块',description:'落地时，同色格倍率增加同色数量×3',detail:'落地时，统计棋盘上与它同色的格数N（含自身），这些格的得分倍率增加3×N，基础倍率为1。再次触发可累加；后来新增的格子不追溯。倍率跟随格子移动、旋转和变色，消除时生效。'}
+    {id:'heavy',name:'超重方块',description:'落地后，各格分别下落到底',detail:'落地后，方块的每一格分别下落到无法继续下落的位置；落空不扣生命。结算下落后再旋转转轴。'},
+    {id:'diamond',name:'钻石方块',description:'同色格倍率增加同色数量×1',detail:'落地时，统计棋盘上与它同色的格数N（含自身），这些格的得分倍率增加1×N，基础倍率为1。再次触发可累加；后来新增的格子不追溯。倍率跟随格子移动、旋转和变色，消除时生效。'}
   ];
   const RULES = Object.freeze({
     levels: 5, scoreGoals: [45,80,120,180,240],
@@ -136,6 +137,9 @@
       this.lite.extraDrops ??= 0;
       this.lite.tools ||= {};
       const retired={bonus:'blast',coin:'blast',chameleon:'column',pigment:'column',spread:'column',link:'heavy',charge:'heavy',prism:'pack'};
+      // Saves from before the diamond block existed have no diamond counter.
+      // Keep current V3 heavy blocks as heavy; migrate only those legacy saves.
+      if(!Object.prototype.hasOwnProperty.call(this.lite.tools||{},'block-diamond'))retired.heavy='diamond';
       for(const [old,id] of Object.entries(retired)){
         const key='block-'+old,next='block-'+id;
         if(this.lite.tools[key])this.lite.tools[next]=(this.lite.tools[next]||0)+this.lite.tools[key];
@@ -213,13 +217,18 @@
       }else if(effect==='pack'){
         removed=cells;this.board=this.board.filter(c=>!ids.has(c.id));compact=true;repack=true;
       }else if(effect==='heavy'){
+        // Compatibility for old saves/tests that invoke the former effect directly.
         const targets=this.board.filter(cell=>cell.type===color),gain=targets.length*3;
+        for(const cell of targets)cell.liteHeavyBonus=(heavyMultiplier(cell)-1)+gain;
+        heavyBoost={count:targets.length,gain,ids:targets.map(cell=>cell.id),maxMultiplier:Math.max(...targets.map(heavyMultiplier))};
+      }else if(effect==='diamond'){
+        const targets=this.board.filter(cell=>cell.type===color),gain=targets.length;
         for(const cell of targets)cell.liteHeavyBonus=(heavyMultiplier(cell)-1)+gain;
         heavyBoost={count:targets.length,gain,ids:targets.map(cell=>cell.id),maxMultiplier:Math.max(...targets.map(heavyMultiplier))};
       }
       // Landing powers are single use. Surviving cells keep their ordinary colour.
       for(const c of this.board)if(ids.has(c.id)){if(effect!=='patch')c.liteEffect=null;delete c.litePrismPending;}
-      const aliases={column:'column_dye',blast:'bomb',trim:'trim',patch:'stitch',pack:'pack',heavy:'gilded'};
+      const aliases={column:'column_dye',blast:'bomb',trim:'trim',patch:'stitch',pack:'pack',heavy:'heavy_drop',diamond:'diamond'};
       const landed=before.filter(c=>ids.has(c.id)),contact={x:landed.reduce((n,c)=>n+c.x,0)/landed.length,y:landed.reduce((n,c)=>n+c.y,0)/landed.length};
       this.events.push({kind:'special',effect:aliases[effect],liteEffect:effect,cells:landed,contact,removed,scoring,heavyBoost});
       if(moved)this.events.push({kind:'compact',before});
@@ -293,13 +302,72 @@
     p.cells = function (piece = this.active) {
       return original.cells.call(this, piece).map(cell => ({ ...cell, liteEffect: piece?.liteEffect ?? null }));
     };
+    p.liteLockHeavy = function (settleImmediately = false) {
+      const piece = this.active;
+      if (this.phase !== 'play' || !piece || this.dropsRemaining <= 0) return false;
+      if (!this.stageCommitted) this.captureDropBudget();
+      if (this.checkDropLimit()) return false;
+      const raw = this.cells(piece).map(cell => ({ ...cell }));
+      const liteDropCost = piece.origin === 'inserted' ? 2 : 1;
+      this.dropsUsed += liteDropCost;
+      this.rotationCredited = false;
+      this.outlineFlowDir = 0;
+      this.stageCommitted = true;
+      this.build.suppress = false;
+      this.build.placement = { count: 0, outline: false, colors: new Set(), mirrored: false, ink: null };
+      this.active = null;
+      this.chain = 0;
+      this.chainPoints = 0;
+      const occupied = new Set(this.board.map(colorKey));
+      occupied.add('0,0');
+      const landed = [];
+      // Resolve each column from its lowest cell upward so the cells can stack
+      // naturally while every cell keeps its original x coordinate.
+      for (const source of raw.sort((a, b) => a.y - b.y || a.x - b.x)) {
+        let y = source.y;
+        while (this.valid([{ x: source.x, y: y - 1, type: source.type }], this.board.concat(landed))) y--;
+        const cell = { ...source, y, id: this.id++ };
+        delete cell.liteEffect;
+        cell.placementId = `${this.stage}:${cell.id}`;
+        cell.liteAttached = true;
+        landed.push(cell);
+        occupied.add(colorKey(cell));
+      }
+      this.board.push(...landed);
+      this.lite.lastPlacementIds = landed.map(cell => cell.id);
+      this.events.push({ kind: 'special', effect: 'heavy_drop', liteEffect: 'heavy', cells: landed.map(cell => ({ ...cell })), removed: [], contact: { x: landed.reduce((n, cell) => n + cell.x, 0) / landed.length, y: landed.reduce((n, cell) => n + cell.y, 0) / landed.length }, scoring: null, heavyDrop: true });
+      const lever = landed.length ? landed.reduce((n, cell) => n + cell.x, 0) / landed.length : 0;
+      const torque = { lever, dir: lever >= 1 ? -1 : lever <= -1 ? 1 : 0 };
+      this.lastTorque = torque;
+      this.events.push({ kind: 'lock', lever: torque.lever, cells: landed, contact: { x: lever, y: landed.reduce((n, cell) => n + cell.y, 0) / landed.length, }, contacts: [], ids: landed.map(cell => cell.id), heavyDrop: true });
+      if (this.checkClear()) {
+        this.lite.heavyRotationTorque = torque;
+        return true;
+      }
+      if (torque.dir && this.beginRotation(torque)) return true;
+      this.checkDeadlock();
+      if (this.phase === 'play') this.spawn();
+      return true;
+    };
     p.lock = function (...args) {
+      if (this.active?.liteEffect === 'heavy') return this.liteLockHeavy(...args);
       const recording = this.phase === 'play' && this.active && this.dropsRemaining > 0;
       const firstId = this.id;
       // Record before lock: the original may rotate, clear or check rescue immediately.
       if (recording) this.lite.lastPlacementIds = this.cells().map((_, index) => firstId + index);
       const result = original.lock.apply(this, args);
       if (recording) this.lite.lastPlacementIds = this.lite.lastPlacementIds.filter(id => id < this.id);
+      return result;
+    };
+    p.finishSettlement = function (...args) {
+      const result = original.finishSettlement.apply(this, args);
+      const torque = this.lite?.heavyRotationTorque;
+      if (torque && this.phase === 'play' && torque.dir) {
+        delete this.lite.heavyRotationTorque;
+        this.beginRotation(torque);
+      } else if (torque && this.phase !== 'clearing' && this.phase !== 'settling') {
+        delete this.lite.heavyRotationTorque;
+      }
       return result;
     };
     p.liteAwardCoinCells = function (cells) {
