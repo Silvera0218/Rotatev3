@@ -241,58 +241,26 @@ test('deadlock waits for a usable swap even with no shovel, then resumes origina
 });
 
 
-test('shovel follows the latest actual placement through rotation and keeps older cells', () => {
-  const g = make();
-  scripted(g, [.99]);
-  for(let i=0;i<12;i++) g.move(0,-1);
-  g.drop(); settle(g);
-  const olderIds = Array.from(g.board, c=>c.id);
-  for(let i=0;i<10;i++) g.move(0,-1);
-  g.rotatePiece(); g.drop(); settle(g);
-  const positions = new Map(g.liteShovelCells().map(c=>[c.id, {x:c.x,y:c.y}]));
-  g.beginRotation({lever:1,dir:-1});settle(g);
-  const latest = g.liteShovelCells();
-  assert.equal(latest.length, 4);
-  assert.ok(latest.some(c=>positions.get(c.id).x!==c.x||positions.get(c.id).y!==c.y));
-  const before = {score:g.score, drops:g.dropsUsed, tools:g.lite.tools.shovel};
-  assert.equal(g.liteUseTool('shovel'), true);
-  assert.deepEqual(Array.from(g.board,c=>c.id), olderIds);
-  assert.equal(g.score, before.score);
-  assert.equal(g.dropsUsed, before.drops);
-  assert.equal(g.lite.tools.shovel, before.tools-1);
-  g.lite.tools.shovel++;
-  assert.equal(g.liteUseTool('shovel'), false);
+test('spread fills the two outermost vacant rings with random colours',()=>{
+ const g=make();g.lite.tools.shovel=1;g.board=[{x:0,y:0,id:g.id++,type:'L'}];
+ const before=g.board.length;assert.equal(g.liteUseTool('shovel'),true);
+ const added=g.events.at(-1).spreadCells;assert(added.length>8);assert.equal(g.board.length,before+added.length);
+ assert(added.every(cell=>['I','J','L','O','S','T','Z'].includes(cell.type)));
+ assert.equal(g.lite.tools.shovel,0);assert.equal(g.liteUseTool('shovel'),false);
 });
 
-
-test('shovel removes only surviving last-placement IDs after clearing and save loading', () => {
-  const g = make();
-  g.drop(); settle(g);
-  const latest = Array.from(g.lite.lastPlacementIds);
-  assert.ok(latest.length);
-  g.board = g.board.filter(c=>c.id!==latest[0]);
-  const survivorIds = Array.from(g.board,c=>c.id);
-  g.board.push({x:5,y:5,id:g.id++,type:'T'});
-  const saved = JSON.parse(JSON.stringify(g));
-  const restored = Object.assign(make(), {board:saved.board,lite:saved.lite});
-  assert.deepEqual(Array.from(restored.liteShovelCells(),c=>c.id),survivorIds);
-  assert.equal(restored.liteUseTool('shovel'),true);
-  assert.equal(restored.board.length,1);
-  assert.equal(restored.board[0].x,5);
-  const h=make();h.board=[{id:99,x:1,y:0,type:'L'}];h.lite.lastPlacementIds=[100];
-  assert.equal(h.liteUseTool('shovel'),false);
-  assert.equal(h.lite.tools.shovel,1);
+test('swap grants a random special block and sends it to reserve when the three slots are full',()=>{
+ const g=make();g.liteGrantTool('supply');g.lite.tools.swap=2;
+ assert.equal(g.liteInventory().active.length,3);assert.equal(g.liteUseTool('swap'),true);
+ const event=g.events.at(-1);assert.equal(event.kind,'lite-special-tool');assert.match(event.id,/^block-/);
+ assert.equal(g.active!==null,true);assert.equal(g.lite.tools.swap,1);
+ assert.equal(g.liteInventory().reserve.includes(event.id),true);
 });
 
-
-test('a missed throw clears the shovel target instead of selecting an older placement', () => {
-  const g = make();g.drop();settle(g);
-  g.active.x=8;g.drop();settle(g);
-  assert.ok(g.events.some(e=>e.kind==='miss'));
-  assert.equal(g.liteShovelCells().length,0);
-  assert.equal(g.liteUseTool('shovel'),false);
+test('a missed heavy piece disappears without losing a life',()=>{
+ const g=make();g.active.liteEffect='heavy';g.active.x=8;g.drop();
+ assert.equal(g.lives,3);assert.equal(g.dropsUsed,1);assert.equal(g.board.length,0);assert.equal(g.events.at(-1).missed,true);
 });
-
 
 test('abandoning a piece keeps the drop budget, including the final remaining throw', () => {
   for(const endless of [false,true])for(const finalThrow of [false,true]){
@@ -498,11 +466,12 @@ test('heavy score weights base and each own colour bonus without boosting other 
  const mixed=Array.from({length:5},(_,x)=>({x,y:1,type:'L',id:x+1,liteHeavyBonus:x<2?12:0}));assert.equal(make().awardCells(mixed,'outline').points,75);
  const trim=make();trim.board=[{x:5,y:0,id:trim.id++,type:'L',liteHeavyBonus:12},{x:6,y:0,id:trim.id++,type:'T'}];assert.equal(land(trim,'trim').scoring.points,14);
 });
-test('diamond uses the same-colour count with a +1 per-cell multiplier gain',()=>{
- const g=make();g.board=[[-1,0,'L'],[1,0,'L'],[2,0,'L'],[4,0,'T']].map(([x,y,type])=>({x,y,type,id:g.id++}));
- piece(g,[[0,1]],'diamond');g.resolvePendingSpecial();
- assert(g.board.filter(c=>c.type==='L').every(c=>c.liteHeavyBonus===4));
- assert.equal(g.events.at(-1).heavyBoost.gain,4);
+test('diamond marks only its own cells and triples their base score on clear',()=>{
+ const g=make();
+ const marked=piece(g,[[0,1]],'diamond');g.resolvePendingSpecial();
+ assert.equal(marked[0].liteDiamond,true);assert.equal(g.board.filter(c=>c.liteDiamond).length,1);
+ const plain=[{x:1,y:1,type:'L',id:g.id++},{x:2,y:1,type:'L',id:g.id++},{x:3,y:1,type:'L',id:g.id++}];g.board.push(...plain);
+ const result=g.awardCells(g.board,'outline');assert.equal(result.diamondCellCount,1);assert.equal(result.diamondMultiplier,3);assert.equal(result.diamondBonus,2);assert.equal(result.points,10);
 });
 test('heavy drops each cell independently without losing a life, then starts the rotor turn',()=>{
  const g=make();g.active.liteEffect='heavy';g.active.x=2;g.drop(true);

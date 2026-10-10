@@ -9,7 +9,7 @@
     {id:'patch',name:'金币方块',description:'消除时，按本次消除格数获得金币',detail:'落地后保留金币标记。消除时，每个金币格获得等同于本批消除格数的金币；多个金币格分别触发。铲除或重排消耗不发金币。'},
     {id:'pack',name:'强迫症方块',description:'落地后，消耗自身将其余方块向内重排'},
     {id:'heavy',name:'超重方块',description:'落地后，各格分别下落到底',detail:'落地后，方块的每一格分别下落到无法继续下落的位置；落空不扣生命。结算下落后再旋转转轴。'},
-    {id:'diamond',name:'钻石方块',description:'同色格倍率增加同色数量×1',detail:'落地时，统计棋盘上与它同色的格数N（含自身），这些格的得分倍率增加1×N，基础倍率为1。再次触发可累加；后来新增的格子不追溯。倍率跟随格子移动、旋转和变色，消除时生效。'}
+    {id:'diamond',name:'钻石方块',description:'消除时，标记的钻石格分数×3',detail:'落地后标记钻石方块自身。被标记的格子消除时，按该格基础分的3倍结算；同色普通格不受影响。标记会跟随方块移动、旋转和重排。'}
   ];
   const RULES = Object.freeze({
     levels: 5, scoreGoals: [45,80,120,180,240],
@@ -17,8 +17,8 @@
     colorScoring: Object.freeze({version:'lite-connected-fibonacci-v1',lineMinimum:4,connectedMinimum:5,firstBonus:4,secondBonus:8,recurrenceEnd:10}),
     coinReward: 5, clearCoins: 5, toolPrice:5, shopSlots:8, buffs: BUFFS,
     tools: [
-      { id: 'shovel', name: '铲子', description: '铲除上一次投放仍留在棋盘上的方块。' },
-      { id: 'swap', name: '换块', description: '把当前落块换成预告中的下一块。' },
+      { id: 'shovel', name: '蔓延', description: '用随机颜色填补最外围两圈空缺。', detail:'优先填补当前最外围一圈，再向外扩一圈；每格颜色随机。' },
+      { id: 'swap', name: '换块', description: '获得一个随机特殊方块。', detail:'优先填入装备槽；装备槽已满时进入暂存背包。' },
       { id: 'supply', name: '补给箱', description: '增加本关总投放次数的10%', detail:'按使用时本关总投放次数的10%增加投放机会，四舍五入；总次数包含此前已增加的次数。' },
       { id: 'dye', name: '调色瓶', description: '将当前落块染成棋盘上最多的颜色。' },
       { id: 'repair', name: '生命之心', description: '恢复 1 次落空容错，最多 3 次。' },
@@ -222,9 +222,8 @@
         for(const cell of targets)cell.liteHeavyBonus=(heavyMultiplier(cell)-1)+gain;
         heavyBoost={count:targets.length,gain,ids:targets.map(cell=>cell.id),maxMultiplier:Math.max(...targets.map(heavyMultiplier))};
       }else if(effect==='diamond'){
-        const targets=this.board.filter(cell=>cell.type===color),gain=targets.length;
-        for(const cell of targets)cell.liteHeavyBonus=(heavyMultiplier(cell)-1)+gain;
-        heavyBoost={count:targets.length,gain,ids:targets.map(cell=>cell.id),maxMultiplier:Math.max(...targets.map(heavyMultiplier))};
+        // Only the diamond piece itself is marked. Same-colour ordinary cells stay plain.
+        for(const cell of cells)cell.liteDiamond=true;
       }
       // Landing powers are single use. Surviving cells keep their ordinary colour.
       for(const c of this.board)if(ids.has(c.id)){if(effect!=='patch')c.liteEffect=null;delete c.litePrismPending;}
@@ -318,8 +317,6 @@
       this.active = null;
       this.chain = 0;
       this.chainPoints = 0;
-      const occupied = new Set(this.board.map(colorKey));
-      occupied.add('0,0');
       const landed = [];
       // Resolve each column from its lowest cell upward so the cells can stack
       // naturally while every cell keeps its original x coordinate.
@@ -331,7 +328,17 @@
         cell.placementId = `${this.stage}:${cell.id}`;
         cell.liteAttached = true;
         landed.push(cell);
-        occupied.add(colorKey(cell));
+      }
+      // A heavy piece that misses the playable outline vanishes. It still
+      // consumes the throw, but never deals damage and never leaves a ghost cell.
+      const targetCells=this.target.cells, minX=Math.min(...targetCells.map(cell=>cell.x))-1, maxX=Math.max(...targetCells.map(cell=>cell.x))+1;
+      const supported = landed.some(cell => (cell.x>=minX&&cell.x<=maxX) || this.board.some(other => Math.abs(other.x-cell.x)<=1 && Math.abs(other.y-cell.y)<=1));
+      if (!supported) {
+        this.lite.lastPlacementIds = [];
+        this.events.push({ kind:'special', effect:'heavy_drop', liteEffect:'heavy', cells:[], removed:[], contact:null, scoring:null, heavyDrop:true, missed:true });
+        this.checkDeadlock();
+        if (this.phase === 'play') this.spawn();
+        return true;
       }
       this.board.push(...landed);
       this.lite.lastPlacementIds = landed.map(cell => cell.id);
@@ -377,6 +384,15 @@
     };
     p.awardCells = function (cells,source='outline') {
       const result=original.awardCells.call(this,cells,source);
+      const diamondCells=[...new Map(cells.filter(cell=>cell.liteDiamond).map(cell=>[colorKey(cell),cell])).values()];
+      if(diamondCells.length){
+        const round=value=>Math.floor(value+.5+Number.EPSILON*Math.max(1,Math.abs(value))*8);
+        const baseBonus=round(diamondCells.length*result.perCell*2);
+        const bonus=round(baseBonus*result.boost*result.synergyMultiplier);
+        this.score+=bonus;this.levelScore+=bonus;this.checkpointScore+=bonus;this.chainPoints+=bonus;
+        result.points+=bonus;result.score0=(result.score0||0)+baseBonus;result.base=(result.base||0)+baseBonus;
+        result.chainPoints=this.chainPoints;result.diamondBonus=bonus;result.diamondCellCount=diamondCells.length;result.diamondMultiplier=3;
+      }
       result.coinReward=this.liteAwardCoinCells(cells);
       if(cells.length&&source==='outline')this.lite.clears++;
       return result;
@@ -417,7 +433,7 @@
     p.checkDeadlock = function (...args) {
       // The original rescue search knows neither lite tool. Let the player use
       // an available shovel or swap before declaring the position unrecoverable.
-      if (this.lite?.tools.shovel > 0 && this.liteShovelCells().length || this.lite?.tools.swap > 0) {
+      if (this.lite?.tools.shovel > 0 && this.target.cells.some(cell=>!this.board.some(other=>colorKey(other)===colorKey(cell))) || this.lite?.tools.swap > 0) {
         this.deadlockCells = [];
         this.deadlockWarning = null;
         return false;
@@ -437,7 +453,7 @@
     p.liteCanUseTool = function (type) {
       if (this.phase !== 'play' || !this.stageCommitted || !this.active || !(this.lite.tools[type] > 0)) return false;
       if(!this.liteInventory().active.includes(type))return false;
-      if (type === 'shovel') return this.liteShovelCells().length > 0;
+      if (type === 'shovel') return this.target.cells.some(cell=>!this.board.some(other=>colorKey(other)===colorKey(cell)));
       if (type === 'dye') { const color = this.liteDyeColor(); return !!color && color !== (this.active.color || this.active.type); }
       if (type === 'repair') return this.lives < 3;
       const effect=RULES.tools.find(tool=>tool.id===type)?.blockEffect;
@@ -447,18 +463,32 @@
     p.liteUseTool = function (type) {
       if (!this.liteCanUseTool(type)) return false;
       if (type === 'shovel') {
-        const cells = this.liteShovelCells();
-        if (!cells.length) return false;
-        const ids = new Set(cells.map(cell => cell.id));
-        this.board = this.board.filter(cell => !ids.has(cell.id));
-        this.lite.lastPlacementIds = [];
-        this.events.push({ kind: 'lite-shovel', cells });
-        this.deadlockCells = [];
-        this.deadlockWarning = null;
+        const colors=['I','J','L','O','S','T','Z'];
+        const occupied=new Set(this.board.map(colorKey));
+        const targetCells=this.target.cells, targetKeys=new Set(targetCells.map(colorKey));
+        const radius=cell=>Math.max(Math.abs(cell.x),Math.abs(cell.y));
+        const maxRadius=targetCells.length?Math.max(...targetCells.map(radius)):0;
+        const ring=targetCells.filter(cell=>radius(cell)===maxRadius);
+        const inner=ring.filter(cell=>!occupied.has(colorKey(cell)));
+        const expansionBase=inner.length?inner:ring;
+        const expansion=[];
+        for(const cell of expansionBase)for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+          const next={x:cell.x+dx,y:cell.y+dy};
+          if(!targetKeys.has(colorKey(next))&&!occupied.has(colorKey(next))&&!expansion.some(other=>colorKey(other)===colorKey(next)))expansion.push(next);
+        }
+        const outer=[...inner,...expansion];
+        const added=outer.map(cell=>({x:cell.x,y:cell.y,type:colors[Math.floor(this.liteRandom()*colors.length)],id:this.id++,placementId:`${this.stage}:spread-${this.id}`,liteAttached:true}));
+        if(!added.length)return false;
+        this.board.push(...added);
+        this.lite.lastPlacementIds=[];
+        this.events.push({ kind:'lite-tool', tool:'shovel', spreadCells:added.map(cell=>({...cell})), amount:added.length });
+        this.deadlockCells=[];this.deadlockWarning=null;
       } else if (type === 'swap') {
-        this.active = null;
-        this.spawn();
-        this.events.push({ kind: 'lite-swap' });
+        const specials=RULES.tools.filter(tool=>tool.blockEffect);
+        const block=specials[Math.floor(this.liteRandom()*specials.length)];
+        const id='block-'+block.blockEffect;
+        this.liteGrantTool(id);
+        this.events.push({ kind:'lite-special-tool', id, source:'swap' });
       } else if (type === 'supply') {
         const amount=Math.floor((this.dropLimit+5)/10);
         this.lite.extraDrops = (this.lite.extraDrops || 0) + amount;

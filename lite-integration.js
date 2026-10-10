@@ -13,12 +13,12 @@ const liteBlockIcon=id=>`<img class="lite-block-icon" src="./assets/icons/block-
 const liteText=(node,text)=>{text=String(text);if(node.textContent!==text)node.textContent=text;};
 const liteIcon = (kind) => {
   if(liteTool(kind)?.blockEffect)return liteBlockIcon(liteTool(kind).blockEffect);
-  if(liteTool(kind))return `<img src="./assets/icons/${kind}.svg" width="32" height="32" alt="" aria-hidden="true">`;
+  if(liteTool(kind)){const asset=kind==='shovel'?'spread':kind;return `<img src="./assets/icons/${asset}.svg" width="32" height="32" alt="" aria-hidden="true">`;}
   const paths={coin:'M6 2h8v2h2v2h2v8h-2v2h-2v2H6v-2H4v-2H2V6h2V4h2z M9 5v10h2V5z',shovel:'M12 1h5v5h-2v3h-2v3h-2v5H8v2H3v-5h2v-3h5V9h2V6h-2V1z',swap:'M4 3h10V1l5 5-5 5V8H4z M16 17H6v2l-5-5 5-5v3h10z',buff:'M8 1h4v5h5v3h-4v4h-3v5H7v-6H2V9h4V5h2z'};
   return `<svg viewBox="0 0 20 20" aria-hidden="true" shape-rendering="crispEdges"><path fill="currentColor" fill-rule="evenodd" d="${paths[kind]||paths.buff}"/></svg>`;
 };
 const toolbar = document.createElement('div');toolbar.id='lite-toolbar';
-toolbar.innerHTML=`<div class="lite-wallet">${liteIcon('coin')}<b id="lite-coins">0</b><span>金币</span></div><div class="lite-run-score"><small>本局得分</small><b id="lite-score">0</b></div><button id="lite-shovel" type="button">${liteIcon('shovel')}<span>铲子</span><b>1</b></button><button id="lite-swap" type="button">${liteIcon('swap')}<span>换块</span><b>1</b></button>`;
+toolbar.innerHTML=`<div class="lite-wallet">${liteIcon('coin')}<b id="lite-coins">0</b><span>金币</span></div><div class="lite-run-score"><small>本局得分</small><b id="lite-score">0</b></div><button id="lite-shovel" type="button">${liteIcon('shovel')}<span>蔓延</span><b>1</b></button><button id="lite-swap" type="button">${liteIcon('swap')}<span>换块</span><b>1</b></button>`;
 I('game-ui').append(toolbar);
 const toolRail=document.createElement('div');toolRail.id='lite-tool-rail';toolRail.setAttribute('role','group');toolRail.setAttribute('aria-label','主动道具');
 for(const {id:kind} of liteConfig.tools){let button=I('lite-'+kind);if(!button){button=document.createElement('button');button.id='lite-'+kind;button.type='button';}button.className='insertion-button';button.innerHTML=`<span class="insertion-glyph">${liteIcon(kind)}</span><b class="insertion-price">0</b><span class="insertion-name">${liteToolName(kind)}</span>`;toolRail.append(button);}
@@ -32,7 +32,7 @@ for(const tool of liteConfig.tools)I('lite-'+tool.id).onclick=()=>{
   if(!liteCanAct()||!L.liteUseTool(tool.id))return;
   const supplyAmount=L.events.findLast(e=>e.kind==='lite-tool'&&e.tool==='supply')?.amount;
   _t();if(tool.id==='swap')resetDropVisuals();yt=0;fe.dirty=true;d3();se.play(tool.id==='swap'?'lock':'clear');
-  const messages={shovel:'已铲除上一次投放的方块',swap:'已换成下一块',supply:`本关投放机会 +${supplyAmount}`,dye:'当前落块已染成棋盘主色',repair:'落空容错 +1'};liteToast(tool.blockEffect?'当前落块已改造为'+tool.name:messages[tool.id]);liteSaveSafe();
+  const spreadAmount=L.events.findLast(e=>e.kind==='lite-tool'&&e.tool==='shovel')?.amount;const messages={shovel:`蔓延填补 ${spreadAmount||0} 格`,swap:'获得随机特殊方块',supply:`本关投放机会 +${supplyAmount}`,dye:'当前落块已染成棋盘主色',repair:'落空容错 +1'};liteToast(tool.blockEffect?'当前落块已改造为'+tool.name:messages[tool.id]);liteSaveSafe();
 };
 // V3 has no passive upgrades or growth rail.
 zf.sync=function(){I('buff-hud').hidden=true;};
@@ -73,13 +73,14 @@ function liteSync(){
 const liteOriginalD3=d3;
 d3=function(...args){
   const heavyEvents=L.events.filter(e=>e.kind==='special'&&e.heavyBoost);
-  const events=L.events.filter(e=>['lite-drop','lite-buy','lite-special','lite-tool-choice','lite-extra-tool','lite-reward-enter','stage-start','lite-precise','v3-unused-buff-trigger'].includes(e.kind));const result=liteOriginalD3(...args);
+  const events=L.events.filter(e=>['lite-drop','lite-buy','lite-special','lite-tool-choice','lite-extra-tool','lite-special-tool','lite-reward-enter','stage-start','lite-precise','v3-unused-buff-trigger'].includes(e.kind));const result=liteOriginalD3(...args);
   for(const e of events){
     const incoming=[];let stage=e.stage??L.stage+1;
     if(e.kind==='lite-drop'){incoming.push(e.tool);stage=L.stage;}
     else if(e.kind==='lite-buy'&&e.category!=='buff')incoming.push(e.category==='special'?'block-'+e.item:e.item);
     else if(e.kind==='lite-special')incoming.push('block-'+e.id);
     else if(e.kind==='lite-tool-choice')incoming.push(e.id);
+    else if(e.kind==='lite-special-tool')incoming.push(e.id);
     else if(e.kind==='lite-extra-tool')incoming.push(...Array.from({length:e.count||1},()=>e.id));
     else if(e.kind==='lite-reward-enter'&&e.route==='tool')incoming.push(...Object.keys(L.lite.roll.tools).filter(id=>L.lite.roll.tools[id]));
     for(const id of incoming)liteAcquisitionQueue.push({id,stage});
@@ -150,7 +151,7 @@ Of=function(scoring,cells=[]){
   const box=I('score-feedback'),number=I('feedback-points');
   c3={t:0,duration:zt?1.25:1.65,anchor:{x:anchor.x,y:anchor.y},combo};scorePopupPulse=null;
   box.hidden=false;box.dataset.tier=combo>=3?'burst':combo>1?'chain':'normal';box.style.setProperty('--score-color',color);
-  I('feedback-title').textContent=title;box.dataset.heavy=String(!!scoring.heavyCellCount);I('feedback-multiplier').textContent=scoring.heavyCellCount?`超重 ${scoring.heavyCellCount} 格 · 最高 ×${scoring.heavyMaxMultiplier}`:'';I('feedback-detail').textContent='';
+  I('feedback-title').textContent=title;box.dataset.heavy=String(!!scoring.heavyCellCount);box.dataset.diamond=String(!!scoring.diamondCellCount);I('feedback-multiplier').textContent=scoring.diamondCellCount?`钻石 ${scoring.diamondCellCount} 格 · ×3`:scoring.heavyCellCount?`超重 ${scoring.heavyCellCount} 格 · 最高 ×${scoring.heavyMaxMultiplier}`:'';I('feedback-detail').textContent='';
   if(scoring.coinReward)liteShowCoinReward(scoring.coinReward,anchor);
   number.textContent=`+${Ne(scoring.points)}`;number.style.removeProperty('transform');delete number.dataset.scorePulse;
   number.style.fontSize=(combo>=3?66:combo>1?60:52)+'px';
@@ -559,11 +560,11 @@ new MutationObserver(trimSettingsStatus).observe(settingsStatus,{childList:true,
 // Cell-owned multipliers stay attached to the rendered cell through every move.
 const heavyMarkers=document.createElement('div');heavyMarkers.id='lite-heavy-markers';heavyMarkers.setAttribute('aria-hidden','true');I('game-ui').append(heavyMarkers);
 function liteSyncHeavyMarkers(){
-  const cells=L.board.filter(cell=>cell.liteHeavyBonus>0),ids=new Set(cells.map(cell=>String(cell.id)));
+  const cells=L.board.filter(cell=>cell.liteHeavyBonus>0||cell.liteDiamond),ids=new Set(cells.map(cell=>String(cell.id)));
   for(const node of [...heavyMarkers.children])if(!ids.has(node.dataset.cell))node.remove();
   for(const cell of cells){
     let node=heavyMarkers.querySelector(`[data-cell="${cell.id}"]`);if(!node){node=document.createElement('span');node.dataset.cell=cell.id;heavyMarkers.append(node);}
-    node.textContent='×'+(1+cell.liteHeavyBonus);
+    node.textContent=cell.liteDiamond?'×3':'×'+(1+cell.liteHeavyBonus);
     const position=rotorCellPositions.get(cell.id)||cell,p=new U(position.x,position.y,position.z||0).project(Bt);
     const edge=new U(position.x+.5,position.y,position.z||0).project(Bt),width=Math.max(12,Math.abs(edge.x-p.x)*Ge.w);
     node.style.left=(p.x+1)*Ge.w/2+'px';node.style.top=Ge.top+(1-p.y)*Ge.playHeight/2+'px';node.style.fontSize=Math.max(6,Math.min(10,width/(node.textContent.length*.65)))+'px';

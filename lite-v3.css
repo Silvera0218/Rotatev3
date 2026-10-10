@@ -219,3 +219,5 @@ html[data-v3] #overlay[data-home=true][data-v3-home=true] .v3-home-piece-label{d
 html[data-v3] #overlay[data-home=true][data-v3-home=true] .v3-home-controls{display:none!important}
 html[data-v3] #overlay[data-home=true][data-v3-home=true] #v3-home-drop{display:none!important}
 @media(max-width:360px){html[data-v3] #overlay[data-home=true][data-v3-home=true] .v3-home-avatar{top:16px;left:12px;width:68px;height:68px}html[data-v3] #overlay[data-home=true][data-v3-home=true] .v3-avatar-face{width:38px;height:38px}html[data-v3] #overlay[data-home=true][data-v3-home=true] .v3-home-quick{top:16px;right:10px;gap:7px}html[data-v3] #overlay[data-home=true][data-v3-home=true] .v3-home-quick button{width:46px;height:46px;padding:7px}html[data-v3] .v3-pixel-icon{width:24px;height:24px}}
+
+html.arcade-ui[data-lite][data-v3] #score-feedback[data-diamond=true] #feedback-multiplier{display:block!important;color:#b9f7ff!important}
