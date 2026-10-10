@@ -13,7 +13,7 @@ const liteBlockIcon=id=>`<img class="lite-block-icon" src="./assets/icons/block-
 const liteText=(node,text)=>{text=String(text);if(node.textContent!==text)node.textContent=text;};
 const liteIcon = (kind) => {
   if(liteTool(kind)?.blockEffect)return liteBlockIcon(liteTool(kind).blockEffect);
-  if(liteTool(kind)){const asset=kind==='shovel'?'spread':kind;return `<img src="./assets/icons/${asset}.svg" width="32" height="32" alt="" aria-hidden="true">`;}
+  if(liteTool(kind)){const asset=kind==='shovel'?'spread':kind;const ext=asset==='spread'?'png':'svg';return `<img src="./assets/icons/${asset}.${ext}" width="32" height="32" alt="" aria-hidden="true">`;}
   const paths={coin:'M6 2h8v2h2v2h2v8h-2v2h-2v2H6v-2H4v-2H2V6h2V4h2z M9 5v10h2V5z',shovel:'M12 1h5v5h-2v3h-2v3h-2v5H8v2H3v-5h2v-3h5V9h2V6h-2V1z',swap:'M4 3h10V1l5 5-5 5V8H4z M16 17H6v2l-5-5 5-5v3h10z',buff:'M8 1h4v5h5v3h-4v4h-3v5H7v-6H2V9h4V5h2z'};
   return `<svg viewBox="0 0 20 20" aria-hidden="true" shape-rendering="crispEdges"><path fill="currentColor" fill-rule="evenodd" d="${paths[kind]||paths.buff}"/></svg>`;
 };

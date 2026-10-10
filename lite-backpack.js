@@ -17,7 +17,7 @@ globalThis.createRotationBackpack=function({rail,config,game,canOpen,pause,resum
       ids.forEach(id=>{
         const tool=config.tools.find(t=>t.id===id),row=document.createElement('button');row.type='button';row.className='backpack-row';row.dataset.tool=id;
         row.innerHTML='<span class="backpack-art"><img width="32" height="32" alt="" draggable="false"></span><span class="backpack-copy"><strong></strong><small></small></span><span class="backpack-effect-copy"></span><span class="backpack-grip" aria-hidden="true">⠿</span>';
-        row.querySelector('img').src='./assets/icons/'+id+'.svg';row.querySelector('strong').textContent=tool.name;row.querySelector('small').textContent='×'+g.lite.tools[id];row.querySelector('.backpack-effect-copy').textContent=tool.description;
+        row.querySelector('img').src='./assets/icons/'+(id==='shovel'?'spread':id)+(id==='shovel'?'.png':'.svg');row.querySelector('strong').textContent=tool.name;row.querySelector('small').textContent='×'+g.lite.tools[id];row.querySelector('.backpack-effect-copy').textContent=tool.description;
         row.setAttribute('aria-label',tool.name+'，数量'+g.lite.tools[id]+'，'+tool.description+'；拖动排序，或按Alt加方向键调整');row.setAttribute('aria-keyshortcuts','Alt+ArrowUp Alt+ArrowDown Alt+ArrowLeft Alt+ArrowRight');
         row.onkeydown=event=>{if(!event.altKey||!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(event.key))return;event.preventDefault();const order=g.liteInventory().order,index=order.indexOf(id),offset=['ArrowUp','ArrowLeft'].includes(event.key)?-1:1;move(id,index+offset);};
         list.append(row);

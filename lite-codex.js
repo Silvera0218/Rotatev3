@@ -1,6 +1,6 @@
 globalThis.createRotationCodex=function({config,makeGame,entry,onResume,onHome}){
   const groups=[{name:'道具',items:config.tools.filter(t=>!t.blockEffect)},{name:'特殊方块',items:config.tools.filter(t=>t.blockEffect)}];
-  const icon=id=>'./assets/icons/'+id+'.svg';
+  const icon=id=>'./assets/icons/'+(id==='shovel'?'spread':id)+(id==='shovel'?'.png':'.svg');
   const dialog=document.createElement('dialog');dialog.id='v3-codex';dialog.setAttribute('aria-labelledby','v3-codex-title');
   dialog.innerHTML=`<header class="codex-header"><img src="./assets/ui/shopkeeper.png" alt="" width="84" height="84"><div><small>ROTATION / FIELD GUIDE</small><h2 id="v3-codex-title">能力图鉴</h2></div><button type="button" class="codex-close v3-popup-close" aria-label="关闭图鉴" title="关闭"></button><svg class="codex-wave" viewBox="0 0 1000 32" preserveAspectRatio="none" aria-hidden="true"><path fill="#c5ff12" d="M0 5Q250 30 500 12T1000 10V32H0Z"/><path fill="#3e5aff" d="M0 18Q250 40 500 23T1000 20V32H0Z"/></svg></header><div class="codex-body"><nav class="codex-index" aria-label="能力目录"></nav><section class="codex-detail" aria-labelledby="codex-name"><div class="codex-detail-heading"><span id="codex-kind"></span><h3 id="codex-name"></h3></div><div class="codex-screen"><canvas width="640" height="360" role="img" aria-label="能力效果演示"></canvas><span class="codex-demo-label">效果演示</span></div><div class="codex-playback"><span id="codex-step" aria-live="off"></span><button id="codex-replay" type="button">↻ 重播</button></div><p id="codex-description"></p></section></div><footer class="codex-footer">点击图标，查看效果</footer>`;
   document.body.append(dialog);const get=s=>dialog.querySelector(s),canvas=get('canvas'),ctx=canvas.getContext('2d');
@@ -29,7 +29,7 @@ globalThis.createRotationCodex=function({config,makeGame,entry,onResume,onHome})
       after=clone(g.board);to=after.filter(c=>cells.some(a=>a.id===c.id));removed=before.filter(c=>!after.some(a=>a.id===c.id));
       const notes={column:'整列染成同色',blast:'本关 100 分 → 爆炸得分 +'+(result.scoring?.points||0),trim:'框外清除，框内保留',patch:note,pack:'向转轴中心重排',heavy:'每格分别下落到底 · 不扣生命',diamond:'同色 '+g.board.filter(c=>c.type==='L').length+' 格 · 每格倍率 +1'};note=notes[item.blockEffect];
     }else if(item.id==='shovel'){
-      g.lite.lastPlacementIds=g.board.filter(c=>c.x>=2).map(c=>c.id);g.lite.tools.shovel=1;g.liteUseTool('shovel');after=clone(g.board);removed=before.filter(c=>!after.some(a=>a.id===c.id));note='移除上一次投放的方块';
+      g.lite.tools.shovel=1;g.liteUseTool('shovel');after=clone(g.board);from=clone(before);to=clone(after);note='随机颜色填补最外围两圈';
     }else if(item.id==='dye'||item.id==='swap'){
       g.active={type:'T',color:'T',shape:[[0,0],[1,0],[0,1]],x:0,y:3};g.next='L';g.nextColor='L';g.nextShape=[[0,0],[0,1],[0,2],[1,0]];from=clone(g.cells());g.lite.tools[item.id]=1;g.liteUseTool(item.id);g.active.x=0;g.active.y=3;to=clone(g.cells());after=before;mode='piece';note=item.id==='dye'?'落块染成棋盘主色':'当前落块换成下一块';
     }else if(item.id==='supply'||item.id==='repair'){
