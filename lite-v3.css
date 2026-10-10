@@ -214,4 +214,8 @@ html[data-v3] .v3-icon-trophy::before{content:"";position:absolute;left:6px;top:
 html[data-v3] .v3-icon-trophy::after{content:"";position:absolute;left:12px;bottom:1px;width:7px;height:7px;background:#ffcb28;border:3px solid #143d99;box-shadow:-7px 5px 0 -2px #ffcb28,7px 5px 0 -2px #ffcb28}
 html[data-v3] #overlay[data-home=true][data-v3-home=true] .v3-home-avatar:focus-visible,html[data-v3] #overlay[data-home=true][data-v3-home=true] .v3-home-quick button:focus-visible{outline:3px solid #c4ff17;outline-offset:3px}
 html[data-v3] #overlay[data-home=true][data-v3-home=true] .v3-home-scene{touch-action:none}
+html[data-v3] #overlay[data-home=true][data-v3-home=true] .v3-home-info,html[data-v3] #overlay[data-home=true][data-v3-home=true] .v3-home-note{display:none!important}
+html[data-v3] #overlay[data-home=true][data-v3-home=true] .v3-home-controls{grid-template-columns:repeat(3,42px)}
+html[data-v3] #overlay[data-home=true][data-v3-home=true] #v3-home-drop{display:none!important}
 @media(max-width:360px){html[data-v3] #overlay[data-home=true][data-v3-home=true] .v3-home-avatar{top:16px;left:12px;width:68px;height:68px}html[data-v3] #overlay[data-home=true][data-v3-home=true] .v3-avatar-face{width:38px;height:38px}html[data-v3] #overlay[data-home=true][data-v3-home=true] .v3-home-quick{top:16px;right:10px;gap:7px}html[data-v3] #overlay[data-home=true][data-v3-home=true] .v3-home-quick button{width:46px;height:46px;padding:7px}html[data-v3] .v3-pixel-icon{width:24px;height:24px}}
+@media(max-width:360px){html[data-v3] #overlay[data-home=true][data-v3-home=true] .v3-home-controls{grid-template-columns:repeat(3,36px)}}
