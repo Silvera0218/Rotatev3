@@ -27,7 +27,7 @@ globalThis.createRotationCodex=function({config,makeGame,entry,onResume,onHome})
       if(item.blockEffect==='heavy')mode='heavy';
       if(item.blockEffect==='patch'){mode='coin';const score=g.awardCells(g.board,'outline');note='消除 '+g.board.length+' 格 · 金币 +'+score.coinReward;g.board=[];}
       after=clone(g.board);to=after.filter(c=>cells.some(a=>a.id===c.id));removed=before.filter(c=>!after.some(a=>a.id===c.id));
-      const notes={column:'整列染成同色',blast:'本关 100 分 → 爆炸得分 +'+(result.scoring?.points||0),trim:'框外清除，框内保留',patch:note,pack:'向转轴中心重排',heavy:'每格分别下落到底 · 不扣生命',diamond:'同色 '+g.board.filter(c=>c.type==='L').length+' 格 · 每格倍率 +1'};note=notes[item.blockEffect];
+      const notes={column:'整列染成同色',blast:'本关 100 分 → 爆炸得分 +'+(result.scoring?.points||0),trim:'框外清除，框内保留',patch:note,pack:'向转轴中心重排',heavy:'每格分别下落到底 · 不扣生命',diamond:'标记同色格 · 消除时分数×3'};note=notes[item.blockEffect];
     }else if(item.id==='shovel'){
       g.lite.tools.shovel=1;g.liteUseTool('shovel');after=clone(g.board);from=clone(before);to=clone(after);note='随机颜色填补最外围两圈';
     }else if(item.id==='dye'||item.id==='swap'){

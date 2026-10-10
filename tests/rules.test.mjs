@@ -246,6 +246,8 @@ test('spread fills the two outermost vacant rings with random colours',()=>{
  const before=g.board.length;assert.equal(g.liteUseTool('shovel'),true);
  const added=g.events.at(-1).spreadCells;assert(added.length>8);assert.equal(g.board.length,before+added.length);
  assert(added.every(cell=>['I','J','L','O','S','T','Z'].includes(cell.type)));
+ const maxRadius=Math.max(...g.board.map(cell=>Math.max(Math.abs(cell.x),Math.abs(cell.y))));
+ assert(maxRadius<=3);assert(g.events.some(event=>event.kind==='compact'));
  assert.equal(g.lite.tools.shovel,0);assert.equal(g.liteUseTool('shovel'),false);
 });
 
@@ -466,12 +468,14 @@ test('heavy score weights base and each own colour bonus without boosting other 
  const mixed=Array.from({length:5},(_,x)=>({x,y:1,type:'L',id:x+1,liteHeavyBonus:x<2?12:0}));assert.equal(make().awardCells(mixed,'outline').points,75);
  const trim=make();trim.board=[{x:5,y:0,id:trim.id++,type:'L',liteHeavyBonus:12},{x:6,y:0,id:trim.id++,type:'T'}];assert.equal(land(trim,'trim').scoring.points,14);
 });
-test('diamond marks only its own cells and triples their base score on clear',()=>{
+test('diamond marks every same-colour cell at landing and triples marked score on clear',()=>{
  const g=make();
+ const existing=[{x:1,y:1,type:'L',id:g.id++},{x:2,y:1,type:'L',id:g.id++},{x:3,y:1,type:'L',id:g.id++}];g.board.push(...existing);
  const marked=piece(g,[[0,1]],'diamond');g.resolvePendingSpecial();
- assert.equal(marked[0].liteDiamond,true);assert.equal(g.board.filter(c=>c.liteDiamond).length,1);
- const plain=[{x:1,y:1,type:'L',id:g.id++},{x:2,y:1,type:'L',id:g.id++},{x:3,y:1,type:'L',id:g.id++}];g.board.push(...plain);
- const result=g.awardCells(g.board,'outline');assert.equal(result.diamondCellCount,1);assert.equal(result.diamondMultiplier,3);assert.equal(result.diamondBonus,2);assert.equal(result.points,10);
+ assert.equal(marked[0].liteDiamond,true);assert.equal(g.board.filter(c=>c.liteDiamond).length,4);
+ const laterSameColour={x:4,y:1,type:'L',id:g.id++};g.board.push(laterSameColour);
+ assert.equal(laterSameColour.liteDiamond,undefined);
+ const result=g.awardCells(g.board,'outline');assert.equal(result.diamondCellCount,4);assert.equal(result.diamondMultiplier,3);assert.equal(result.diamondBonus,8);assert.equal(result.points,21);
 });
 test('heavy drops each cell independently without losing a life, then starts the rotor turn',()=>{
  const g=make();g.active.liteEffect='heavy';g.active.x=2;g.drop(true);

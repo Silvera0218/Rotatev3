@@ -9,7 +9,7 @@
     {id:'patch',name:'金币方块',description:'消除时，按本次消除格数获得金币',detail:'落地后保留金币标记。消除时，每个金币格获得等同于本批消除格数的金币；多个金币格分别触发。铲除或重排消耗不发金币。'},
     {id:'pack',name:'强迫症方块',description:'落地后，消耗自身将其余方块向内重排'},
     {id:'heavy',name:'超重方块',description:'落地后，各格分别下落到底',detail:'落地后，方块的每一格分别下落到无法继续下落的位置；落空不扣生命。结算下落后再旋转转轴。'},
-    {id:'diamond',name:'钻石方块',description:'消除时，标记的钻石格分数×3',detail:'落地后标记钻石方块自身。被标记的格子消除时，按该格基础分的3倍结算；同色普通格不受影响。标记会跟随方块移动、旋转和重排。'}
+    {id:'diamond',name:'钻石方块',description:'同色标记格消除时分数×3',detail:'落地时标记棋盘上全部同色方块；这些格子消除时按基础分的3倍结算。标记会跟随方块移动、旋转和重排。'}
   ];
   const RULES = Object.freeze({
     levels: 5, scoreGoals: [45,80,120,180,240],
@@ -222,8 +222,9 @@
         for(const cell of targets)cell.liteHeavyBonus=(heavyMultiplier(cell)-1)+gain;
         heavyBoost={count:targets.length,gain,ids:targets.map(cell=>cell.id),maxMultiplier:Math.max(...targets.map(heavyMultiplier))};
       }else if(effect==='diamond'){
-        // Only the diamond piece itself is marked. Same-colour ordinary cells stay plain.
-        for(const cell of cells)cell.liteDiamond=true;
+        // Snapshot every same-colour cell at landing time. Later cells of the
+        // same colour do not inherit the mark retroactively.
+        for(const cell of this.board)if(cell.type===color)cell.liteDiamond=true;
       }
       // Landing powers are single use. Surviving cells keep their ordinary colour.
       for(const c of this.board)if(ids.has(c.id)){if(effect!=='patch')c.liteEffect=null;delete c.litePrismPending;}
@@ -480,8 +481,11 @@
         const added=outer.map(cell=>({x:cell.x,y:cell.y,type:colors[Math.floor(this.liteRandom()*colors.length)],id:this.id++,placementId:`${this.stage}:spread-${this.id}`,liteAttached:true}));
         if(!added.length)return false;
         this.board.push(...added);
+        // The outer-ring fill can create a thin, unsupported shell. Repack the
+        // complete board toward the rotor center so every spread stays compact.
+        this.settleRemaining(true);
         this.lite.lastPlacementIds=[];
-        this.events.push({ kind:'lite-tool', tool:'shovel', spreadCells:added.map(cell=>({...cell})), amount:added.length });
+        this.events.push({ kind:'lite-tool', tool:'shovel', spreadCells:added.map(cell=>({...cell})), amount:added.length, compact:true });
         this.deadlockCells=[];this.deadlockWarning=null;
       } else if (type === 'swap') {
         const specials=RULES.tools.filter(tool=>tool.blockEffect);
