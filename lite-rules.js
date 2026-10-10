@@ -529,12 +529,22 @@
       options.push(remaining.find(id=>!previous.includes(id))??remaining[0]);
       return shuffle(options);
     };
-    p.liteOfferPrice = function (offer) {
-      const id=offer.kind==='special'?'block-'+offer.item:offer.item;
-      const count=this.lite.shopPurchases?.[id]||0;
+    const fibonacciPrice = count => {
       let price=RULES.toolPrice,next=RULES.toolPrice*2;
       for(let n=0;n<count;n++)[price,next]=[next,price+next];
       return price;
+    };
+    p.liteOfferPrice = function (offer) {
+      const id=offer.kind==='special'?'block-'+offer.item:offer.item;
+      return fibonacciPrice(this.lite.shopPurchases?.[id]||0);
+    };
+    p.liteOfferBatchPrice = function (offer, quantity=1) {
+      if(!Number.isInteger(quantity)||quantity<=0)return Infinity;
+      const id=offer.kind==='special'?'block-'+offer.item:offer.item;
+      const count=this.lite.shopPurchases?.[id]||0;
+      let total=0;
+      for(let n=0;n<quantity;n++)total+=fibonacciPrice(count+n);
+      return total;
     };
     p.liteCreateShop = function () {
       const shuffle=items=>{for(let i=items.length-1;i>0;i--){const j=Math.floor(this.liteRandom()*(i+1));[items[i],items[j]]=[items[j],items[i]];}return items;};
@@ -542,20 +552,21 @@
       const special=shuffle(RULES.tools.filter(t=>t.blockEffect)).slice(0,4);
       return shuffle([...normal,...special]).map((tool,slot)=>({slot,kind:tool.blockEffect?'special':'tool',item:tool.blockEffect||tool.id}));
     };
-    p.liteBuyOffer = function (slot) {
+    p.liteBuyOffer = function (slot, quantity=1) {
       const r=this.lite.roll;
       if(!rewardPhase(this)||!r?.entered||r.adReadyAt!==null)return false;
       const offer=r.shopOffers?.find(item=>item.slot===slot);
       if(!offer)return false;
-      const price=this.liteOfferPrice(offer);
+      if(!Number.isInteger(quantity)||quantity<=0)return false;
+      const price=this.liteOfferBatchPrice(offer,quantity);
       if(this.lite.coins<price)return false;
       const id=offer.kind==='special'?'block-'+offer.item:offer.item;
       if(!RULES.tools.some(t=>t.id===id))return false;
-      this.lite.coins-=price;offer.paidPrice=price;
+      this.lite.coins-=price;offer.paidPrice=price;offer.paidQuantity=quantity;
       this.lite.shopPurchases ||= {};
-      this.lite.shopPurchases[id]=(this.lite.shopPurchases[id]||0)+1;
-      this.liteGrantTool(id);
-      this.events.push({kind:'lite-buy',item:offer.item,category:offer.kind});return true;
+      this.lite.shopPurchases[id]=(this.lite.shopPurchases[id]||0)+quantity;
+      this.liteGrantTool(id,quantity);
+      this.events.push({kind:'lite-buy',item:offer.item,category:offer.kind,quantity,totalPrice:price});return true;
     };
     p.litePrepareReward = function () {
       if(!rewardPhase(this))return null;

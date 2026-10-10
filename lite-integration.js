@@ -4,7 +4,7 @@ let liteRewardStage = -1, liteRewardAdvance = null;
 let liteNaturalFall = true;
 let liteRewardPanel = null, liteLastHint = '';
 const liteAcquisitionQueue=[];let liteAcquisitionPlaying=false;
-let liteShopDialog=null,liteShopSelection=null;
+let liteShopDialog=null,liteShopSelection=null,liteShopQuantity=1;
 let liteCompletionStage=-1,liteCompletionState=null;
 const liteTool = id => liteConfig.tools.find(tool=>tool.id===id);
 const liteToolName = id => liteTool(id)?.name||id;
@@ -198,13 +198,38 @@ function litePositionShopDetail(){
   const y=Math.max(top+12,Math.min(top+height-rect.height-12,below+rect.height<=top+height-12?below:above));
   liteShopDialog.style.left=x+'px';liteShopDialog.style.top=y+'px';
 }
+function liteShopMaxQuantity(offer){
+  let quantity=0;
+  while(true){
+    const next=quantity+1,cost=L.liteOfferBatchPrice(offer,next);
+    if(!Number.isFinite(cost)||cost>L.lite.coins)break;
+    quantity=next;
+  }
+  return quantity;
+}
+function liteRenderShopDetail(){
+  if(!liteShopDialog?.open||!liteShopSelection)return;
+  const offer=liteShopSelection.offer,entry=offer.kind==='special'?liteSpecial(offer.item):liteTool(offer.item);
+  const quantity=liteShopQuantity,max=liteShopMaxQuantity(offer),total=L.liteOfferBatchPrice(offer,quantity),unit=L.liteOfferPrice(offer);
+  I('lite-shop-detail-name').textContent=entry.name+' ×'+quantity;
+  I('lite-shop-detail-quantity').textContent=String(quantity);
+  I('lite-shop-detail-quantity').setAttribute('aria-label','购买数量 '+quantity);
+  I('lite-shop-detail-minus').disabled=quantity<=1;
+  I('lite-shop-detail-plus').disabled=max===0||quantity>=max;
+  I('lite-shop-detail-price').textContent='总价 '+total+' 金币';
+  I('lite-shop-detail-wallet').textContent=`持有 ${L.lite.coins} 金币 · 单价 ${unit} 金币`;
+  const buy=I('lite-shop-detail-buy'),poor=max===0||L.lite.coins<total;
+  buy.disabled=poor;buy.textContent=poor?'金币不足':'购买 ×'+quantity;
+}
 function liteOpenShopDetail(offer,button,event){
   if(!liteShopDialog){
     liteShopDialog=document.createElement('dialog');liteShopDialog.id='lite-shop-detail';
     liteShopDialog.setAttribute('aria-labelledby','lite-shop-detail-name');liteShopDialog.setAttribute('aria-describedby','lite-shop-detail-effect');
-    liteShopDialog.innerHTML='<div class="lite-shop-detail-head"><div id="lite-shop-detail-icon" aria-hidden="true"></div><div><small id="lite-shop-detail-category"></small><h2 id="lite-shop-detail-name"></h2></div></div><p id="lite-shop-detail-effect"></p><div class="lite-shop-detail-cost"><strong id="lite-shop-detail-price"></strong><span id="lite-shop-detail-wallet"></span></div><div class="lite-shop-detail-actions"><button type="button" id="lite-shop-detail-cancel" class="v3-popup-close" aria-label="关闭道具详情" title="关闭"></button><button type="button" id="lite-shop-detail-buy">购买</button></div>';
+    liteShopDialog.innerHTML='<div class="lite-shop-detail-head"><div id="lite-shop-detail-icon" aria-hidden="true"></div><div><small id="lite-shop-detail-category"></small><h2 id="lite-shop-detail-name"></h2></div></div><p id="lite-shop-detail-effect"></p><div class="lite-shop-detail-cost"><strong id="lite-shop-detail-price"></strong><span id="lite-shop-detail-wallet"></span></div><div class="lite-shop-detail-quantity" role="group" aria-label="购买数量"><button type="button" id="lite-shop-detail-minus" aria-label="减少购买数量">−</button><strong id="lite-shop-detail-quantity">1</strong><button type="button" id="lite-shop-detail-plus" aria-label="增加购买数量">＋</button></div><div class="lite-shop-detail-actions"><button type="button" id="lite-shop-detail-cancel" class="v3-popup-close" aria-label="关闭道具详情" title="关闭"></button><button type="button" id="lite-shop-detail-buy">购买 ×1</button></div>';
     document.body.append(liteShopDialog);
     I('lite-shop-detail-cancel').onclick=()=>liteCloseShopDetail();
+    I('lite-shop-detail-minus').onclick=()=>{liteShopQuantity=Math.max(1,liteShopQuantity-1);liteRenderShopDetail();};
+    I('lite-shop-detail-plus').onclick=()=>{const max=liteShopMaxQuantity(liteShopSelection.offer);if(max>liteShopQuantity)liteShopQuantity++;liteRenderShopDetail();};
     liteShopDialog.addEventListener('cancel',e=>{e.preventDefault();liteCloseShopDetail();});
     liteShopDialog.addEventListener('keydown',e=>e.stopPropagation());
     installRotationPopupMotion(liteShopDialog);
@@ -214,23 +239,19 @@ function liteOpenShopDetail(offer,button,event){
     liteShopDialog.addEventListener('click',e=>{if(outsideDown&&outside(e))liteCloseShopDetail();outsideDown=false;});
     I('lite-shop-detail-buy').onclick=()=>{
       const slot=liteShopSelection?.slot;if(slot===undefined)return;
-      if(!L.liteBuyOffer(slot)){I('lite-shop-detail-buy').disabled=true;I('lite-shop-detail-buy').textContent='暂时无法购买';return;}
+      if(!L.liteBuyOffer(slot,liteShopQuantity)){liteRenderShopDetail();return;}
       liteUpdateReward();liteSync();d3();se.play('clear');liteSaveSafe();liteCloseShopDetail();
     };
     const reposition=()=>{if(!liteShopSelection)return;const r=liteShopSelection.button.getBoundingClientRect();liteShopSelection.point={x:r.left+r.width/2,y:r.top+r.height/2};litePositionShopDetail();};
     window.addEventListener('resize',reposition);window.visualViewport?.addEventListener('resize',reposition);
   }
-  const rect=button.getBoundingClientRect();liteShopSelection={slot:offer.slot,button,point:event.detail?{x:event.clientX,y:event.clientY}:{x:rect.left+rect.width/2,y:rect.top+rect.height/2}};
+  const rect=button.getBoundingClientRect();liteShopQuantity=1;liteShopSelection={slot:offer.slot,offer,button,point:event.detail?{x:event.clientX,y:event.clientY}:{x:rect.left+rect.width/2,y:rect.top+rect.height/2}};
   const entry=offer.kind==='special'?liteSpecial(offer.item):liteTool(offer.item);
-  I('lite-shop-detail-name').textContent=entry.name+' +1';
   I('lite-shop-detail-category').textContent={tool:'道具',special:'特殊方块'}[offer.kind];
   I('lite-shop-detail-effect').textContent=entry.detail||entry.description;
   const art=I('lite-shop-detail-icon');art.replaceChildren();
   art.innerHTML=offer.kind==='special'?liteBlockIcon(offer.item):liteIcon(offer.item);
-  const price=L.liteOfferPrice(offer);
-  I('lite-shop-detail-price').textContent=price+' 金币';I('lite-shop-detail-wallet').textContent='持有 '+L.lite.coins+' 金币';
-  const buy=I('lite-shop-detail-buy'),poor=L.lite.coins<price;buy.disabled=poor;buy.textContent=poor?'金币不足':'购买';
-  liteShopDialog.showModal();litePositionShopDetail();(buy.disabled?I('lite-shop-detail-cancel'):buy).focus({preventScroll:true});
+  liteShopDialog.showModal();liteRenderShopDetail();litePositionShopDetail();(I('lite-shop-detail-buy').disabled?I('lite-shop-detail-cancel'):I('lite-shop-detail-buy')).focus({preventScroll:true});
 }
 function liteCreateReward(){
   if(liteRewardPanel)return;

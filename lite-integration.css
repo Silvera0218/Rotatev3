@@ -109,8 +109,11 @@ html.arcade-ui[data-lite] #lite-shop-detail-effect{margin:15px 0;font-size:14px;
 html[data-lite] #lite-shop-detail .lite-shop-detail-cost{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin:12px 0 16px}
 html[data-lite] #lite-shop-detail-price{font-size:19px;color:#2847b2}
 html[data-lite] #lite-shop-detail-wallet{font-size:11px;color:#57749b}
+html[data-lite] #lite-shop-detail .lite-shop-detail-quantity{display:grid;grid-template-columns:44px 1fr 44px;align-items:center;gap:10px;margin:4px 0 14px;padding:4px;border:1px solid #8ab6e4;border-radius:10px;background:#e7f6ff}
+html[data-lite] #lite-shop-detail-quantity{text-align:center;font-size:22px;line-height:34px;color:#284775;font-variant-numeric:tabular-nums}
 html[data-lite] #lite-shop-detail .lite-shop-detail-actions{display:grid;grid-template-columns:1fr 1.25fr;gap:10px}
 html.arcade-ui[data-lite] #lite-shop-detail button{min-height:44px;padding:8px;border:2px solid #3454f7;border-radius:6px;background:#f7fcff;color:#294775;box-shadow:0 3px 0 #93bbe5;font-size:15px;cursor:pointer}
+html.arcade-ui[data-lite] #lite-shop-detail .lite-shop-detail-quantity button{min-height:38px;padding:2px;font-size:24px;line-height:30px}
 html.arcade-ui[data-lite] #lite-shop-detail #lite-shop-detail-buy{background:#c4ff17;box-shadow:0 3px 0 #86b433}
 html.arcade-ui[data-lite] #lite-shop-detail button:disabled{opacity:.5;cursor:default}
 html.arcade-ui[data-lite] #lite-shop-detail button:focus-visible{outline:3px solid #1b87ef;outline-offset:3px}

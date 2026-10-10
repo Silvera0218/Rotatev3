@@ -383,6 +383,16 @@ test('shop repeats purchases with independent Fibonacci prices, keeps choices an
  assert.equal(h.liteOfferPrice({...offer,slot:777}),price);h.reset();assert.equal(h.liteOfferPrice(offer),5);
 });
 
+test('shop batch purchase sums consecutive Fibonacci prices and grants one item per quantity',()=>{
+ const g=make(),r=complete(g),offer=r.shopOffers[0],id=offer.kind==='special'?'block-'+offer.item:offer.item;
+ assert.equal(g.liteOfferBatchPrice(offer,3),30);g.lite.coins=30;
+ const before=g.lite.tools[id]||0;assert.equal(g.liteBuyOffer(offer.slot,3),true);
+ assert.equal(g.lite.coins,0);assert.equal(g.lite.tools[id],before+3);assert.equal(g.lite.shopPurchases[id],3);
+ assert.equal(offer.paidPrice,30);assert.equal(offer.paidQuantity,3);assert.equal(g.events.at(-1).quantity,3);assert.equal(g.events.at(-1).totalPrice,30);
+ assert.equal(g.liteOfferPrice(offer),25);assert.equal(g.liteOfferBatchPrice(offer,2),65);
+ const coins=g.lite.coins,owned=g.lite.tools[id];assert.equal(g.liteBuyOffer(offer.slot,2),false);assert.equal(g.lite.coins,coins);assert.equal(g.lite.tools[id],owned);
+});
+
 test('free rewards and rotor drops do not raise shop prices; old sold stock reopens at its next price',()=>{
  const g=make(),r=complete(g),offer=r.shopOffers[0],id=offer.kind==='special'?'block-'+offer.item:offer.item;
  g.lite.tools[id]+=8;assert.equal(g.liteOfferPrice(offer),5);
