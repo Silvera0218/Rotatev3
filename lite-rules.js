@@ -12,8 +12,9 @@
     {id:'diamond',name:'钻石方块',description:'同色标记格消除时分数×3',detail:'落地时标记棋盘上全部同色方块；这些格子消除时按基础分的3倍结算。标记会跟随方块移动、旋转和重排。'}
   ];
   const RULES = Object.freeze({
-    levels: 5, scoreGoals: [45,80,120,180,240],
-    dropLimit: 24, lateDropStart: 3, lateDropBase: 36, lateDropStep: 6, rotorDropChance: 0.06,
+    levels: 5, scoreGoals: [45,80,120,180,210],
+    dropLimit: 24, lateDropStart: 3, lateDropBase: 36, lateDropStep: 6, postFourthDropBonus: 6,
+    lateScoreStart: 4, lateScoreFactor: 0.875, rotorDropChance: 0.06,
     colorScoring: Object.freeze({version:'lite-connected-fibonacci-v1',lineMinimum:4,connectedMinimum:5,firstBonus:4,secondBonus:8,recurrenceEnd:10}),
     coinReward: 5, clearCoins: 5, toolPrice:5, shopSlots:8, buffs: BUFFS,
     tools: [
@@ -108,6 +109,12 @@
       'completeCheckpoint', 'checkDeadlock', 'checkClear', 'resolvePendingSpecial', 'finishSettlement']) original[key] = p[key];
     const originalTarget = Object.getOwnPropertyDescriptor(p, 'target').get;
     const originalDropLimit = Object.getOwnPropertyDescriptor(p, 'dropLimit').get;
+    const stageGoal = (game, stage) => {
+      const configured = RULES.scoreGoals[stage];
+      if (configured !== undefined) return configured;
+      const native = originalTarget.call({ ...game, stage, outline: null }).goals[0];
+      return stage >= RULES.lateScoreStart ? Math.max(1, Math.round(native * RULES.lateScoreFactor)) : native;
+    };
     const randomTool = game => RULES.tools[Math.floor(game.liteRandom() * RULES.tools.length)].id;
     const emptyTools = () => Object.fromEntries(RULES.tools.map(tool => [tool.id, 0]));
     const rewardPhase = game => game.phase === 'checkpoint-complete';
@@ -258,9 +265,9 @@
     Object.defineProperty(p, 'target', { configurable: true, get() {
       return originalTarget.call(this);
     } });
-    Object.defineProperty(p, 'goal', { configurable: true, get() { return RULES.scoreGoals[this.stage] ?? this.target.goals[0]; } });
+    Object.defineProperty(p, 'goal', { configurable: true, get() { return stageGoal(this, this.stage); } });
     Object.defineProperty(p, 'dropLimit', { configurable: true, get() {
-      const base=this.stage<RULES.lateDropStart?RULES.dropLimit:RULES.lateDropBase+(this.stage-RULES.lateDropStart)*RULES.lateDropStep;
+      const base=this.stage<RULES.lateDropStart?RULES.dropLimit:RULES.lateDropBase+(this.stage-RULES.lateDropStart)*RULES.lateDropStep+(this.stage>=RULES.lateScoreStart?RULES.postFourthDropBonus:0);
       return (this.endless?Math.max(base,originalDropLimit.call(this)):base) + (this.lite?.extraDrops || 0);
     } });
     const originalRevive=p.revive;
@@ -589,7 +596,7 @@
     p.liteNextStageInfo = function () {
       const stage=this.stage+1;
       if(!this.endless&&stage>=RULES.levels)return {stage:RULES.levels-1,won:true,goal:null};
-      return {stage,won:false,goal:RULES.scoreGoals[stage]??originalTarget.call({...this,stage,outline:null}).goals[0]};
+      return {stage,won:false,goal:stageGoal(this,stage)};
     };
     p.liteNext = function () {
       if (!rewardPhase(this) || !this.lite.roll?.entered || !this.lite.roll.settled) return false;

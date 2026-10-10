@@ -148,6 +148,20 @@ test('score gate ignores clear count, rejects below goal, and accepts exact and 
   assert.ok(g.events.some(e=>e.kind==='clear'));assert.equal(g.active,null);
 });
 
+test('post-fourth-stage tuning lowers score pressure and increases the drop budget', () => {
+  const g = make();
+  g.stage = 3;
+  assert.equal(g.goal, 180);
+  assert.equal(g.dropLimit, 36);
+  g.stage = 4;
+  assert.equal(g.goal, 210);
+  assert.equal(g.dropLimit, 48);
+  g.endless = true;
+  g.stage = 5;
+  assert.equal(g.goal, Math.round(g.target.goals[0] * 0.875));
+  assert.equal(g.dropLimit, Math.max(54, new original.Game(42).dropLimit));
+});
+
 
 test('four actual drops form a twelve-cell colour group and pass using the new score', () => {
   const g = make();
@@ -385,7 +399,7 @@ test('clear overflow uses half-up rounding and never pays twice after reload or 
 });
 test('stage budgets, inventory and skipping continue every stage and finish the run',()=>{
  const g=make();g.lite.tools['block-pack']=4;g.lite.tools.repair=3;
- for(const budget of [24,24,24,36,42]){
+ for(const budget of [24,24,24,36,48]){
   assert.equal(g.dropLimit,budget);complete(g);assert.equal(g.liteSkipReward(),true);assert.equal(g.lite.tools['block-pack'],4);assert.equal(g.lite.tools.repair,3);
  }
  assert.equal(g.phase,'won');assert.equal(g.liteSkipReward(),false);g.reset();assert.equal(g.lite.tools['block-pack'],0);assert.equal(g.lite.tools.repair,0);
@@ -393,7 +407,7 @@ test('stage budgets, inventory and skipping continue every stage and finish the 
 test('endless retains native varied contours, increasing budgets and continues beyond stage five',()=>{
  const g=make(),baseline=new original.Game(42);g.endless=baseline.endless=true;baseline.outlineSeed=g.outlineSeed;const shapes=new Set();
  for(let stage=0;stage<12;stage++){
-  g.stage=baseline.stage=stage;g.outline=baseline.outline=null;assert.equal(JSON.stringify(g.target.cells),JSON.stringify(baseline.target.cells));shapes.add(JSON.stringify(g.target.cells));assert.equal(g.dropLimit,Math.max(stage<3?24:36+(stage-3)*6,baseline.dropLimit));
+  g.stage=baseline.stage=stage;g.outline=baseline.outline=null;assert.equal(JSON.stringify(g.target.cells),JSON.stringify(baseline.target.cells));shapes.add(JSON.stringify(g.target.cells));const tuned=stage<3?24:36+(stage-3)*6+(stage>=4?6:0);assert.equal(g.dropLimit,Math.max(tuned,baseline.dropLimit));
  }
  assert(shapes.size>5);complete(g);assert.equal(g.liteSkipReward(),true);assert.equal(g.stage,12);assert.equal(g.phase,'play');
 });
