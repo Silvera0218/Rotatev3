@@ -9961,10 +9961,16 @@ P6=function(text){const value=JSON.parse(text,Lf),g=value?.game;
 jr=function(storage,game,fallTime){if(!['play','checkpoint-complete','lost','won'].includes(game.phase)||game.events.length||k0||Ie.busy)throw Error('等待棋盘结算');const text=JSON.stringify({version:'rotation-v3-1',savedAt:Date.now(),fallTime,game},Jr);P6(text);storage.setItem(o5,text);};
 Qr=function(game,value){const saved=P6(JSON.stringify(value,Jr));Object.assign(game,saved.game);game.liteEnsureExpansion();return Math.min(.8,saved.fallTime||0);};
 function liteSaveSafe(){try{if(he&&!k0&&!Ie.busy&&['play','checkpoint-complete'].includes(L.phase))jr(localStorage,L,yt);}catch{}}
-f5=function(){Qe=null;N3=false;try{Qe=I6(localStorage);}catch{I('home-save-summary').textContent='V3 存档无法读取，可以重新开始。';}
-  I('start').innerHTML=Df;const label=I('start').querySelector('.home-start-content > span');if(label)label.textContent=Qe?'继续 V3':'开始游戏';I('start').setAttribute('aria-label',Qe?'继续 V3':'开始游戏');I('start').disabled=false;I('home-new-run').hidden=!Qe;
-  if(Qe)I('home-save-summary').textContent=`已保存 · ${Qe.game.endless?'无尽模式 · ':''}第 ${Qe.game.stage+1} 关 · ${Qe.game.score} 分`;else I('home-save-summary').textContent='道具补给 · 特殊方块 · 旋转消除';
-  if(typeof v3ReconcileRankGifts==='function'){v3ReadGroundState();v3ReconcileRankGifts();v3HomeSync();}
+// Keep the original start screen. V3 only replaces the game start handler below;
+// the home copy, save summary and new-run controls stay in the base UI.
+const liteOriginalF5=f5;
+f5=function(){
+  liteOriginalF5();
+  if(typeof v3ReconcileRankGifts==='function'){
+    v3ReadGroundState();
+    v3ReconcileRankGifts();
+    if(typeof v3HomeSync==='function')v3HomeSync();
+  }
 };
 g5=true;m5=true;pa=function(){z3.hidden=true;};pa();z3.onclick=null;
 const liteOriginalB6=B6;
@@ -9995,13 +10001,15 @@ function liteSyncLives(){
   for(let i=0;i<L.lives;i++){const heart=lifeLine.querySelector('.life-pixel-face').cloneNode(true);heart.removeAttribute('id');heart.classList.add('v3-life-heart');lifeHearts.append(heart);}
   lifeLine.setAttribute('aria-label','剩余生命 '+value);
 }
-const homeBadge=document.createElement('span');homeBadge.className='lite-home-badge';homeBadge.textContent='ROTATION V3 · 道具补给';I('overlay').append(homeBadge);
 // Ranked home: one shared mode, a slowly turning pixel sky, and a small tower
 // that stores the ordinary blocks earned from completed stages.
-const v3HomeOverlay=I('overlay');v3HomeOverlay.dataset.v3Home='true';
+const v3HomeOverlay=I('overlay');
 const v3HomePanel=document.createElement('section');v3HomePanel.id='v3-home-panel';v3HomePanel.setAttribute('aria-labelledby','v3-home-title');
 v3HomePanel.innerHTML='<button type="button" class="v3-home-avatar" id="v3-home-avatar" aria-label="玩家头像"><span class="v3-avatar-face" aria-hidden="true"></span></button><nav class="v3-home-quick" aria-label="大厅入口"><button type="button" id="v3-home-settings" aria-label="设置"><span class="v3-pixel-icon v3-icon-gear" aria-hidden="true"></span></button><button type="button" id="v3-home-codex" aria-label="图鉴"><span class="v3-pixel-icon v3-icon-book" aria-hidden="true"></span></button><button type="button" id="v3-home-leaderboard" aria-label="排行榜"><span class="v3-pixel-icon v3-icon-trophy" aria-hidden="true"></span></button></nav><div class="v3-home-scene"><canvas id="v3-home-canvas" width="760" height="920" aria-label="像素天空与方块地基"></canvas><div class="v3-home-scene-label">四面天空盒 · 自由拼图</div><div class="v3-home-piece-label" id="v3-home-piece-label">拖动方块，自由拼图</div></div><div class="v3-home-info"><strong id="v3-home-gift-count">地面 0 格</strong><span id="v3-home-status">完成排行关卡后，获得一块普通方块</span></div><div class="v3-home-actions"><button type="button" id="v3-home-start">排行模式 <span>→</span></button><button type="button" id="v3-home-rank">练习模式</button></div><p class="v3-home-note">每通关一关获得一块随机普通方块 · 拖动到地基或塔身即可放置</p>';
 v3HomeOverlay.querySelector('.dialog').append(v3HomePanel);
+// The free-puzzle lobby is retired; keep its state helpers inert so the old
+// start screen retains its keyboard and pointer controls.
+v3HomePanel.hidden=true;
 const v3HomeCanvas=I('v3-home-canvas'),v3HomeCtx=v3HomeCanvas.getContext('2d');
 const v3HomePieces=[
   {id:'bar',name:'长条方块',color:'#68e6ff',cells:[[0,0],[1,0],[2,0],[3,0]]},
