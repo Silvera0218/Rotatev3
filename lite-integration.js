@@ -118,8 +118,41 @@ function liteSync(){
   if(upcoming)liteText(I('next-caption'),'下一个 · '+liteSpecial(upcoming).name);
   I('growth-summary').hidden=true;
 }
+const liteSpreadGrowth=new Map();
+function liteGetSpreadScale(id){
+  const item=liteSpreadGrowth.get(id);
+  if(!item)return 1;
+  const now=performance.now();
+  const elapsed=now-(item.startTime+item.delay);
+  if(elapsed<=0)return 0.0001;
+  const p=Math.min(1,elapsed/item.duration);
+  if(p>=1){liteSpreadGrowth.delete(id);return 1;}
+  return Math.sin(p*Math.PI*0.5)+0.25*Math.sin(p*Math.PI)*(1-p);
+}
+if(typeof landingCellScale==='function'){
+  const liteOriginalLandingScale=landingCellScale;
+  landingCellScale=function(id){
+    return liteOriginalLandingScale(id)*liteGetSpreadScale(id);
+  };
+}
 const liteOriginalD3=d3;
 d3=function(...args){
+  const spreadEvents=L.events.filter(e=>e.kind==='lite-tool'&&e.tool==='shovel'&&!e._growthAnimated);
+  for(const ev of spreadEvents){
+    ev._growthAnimated=true;
+    if(ev.spreadCells?.length){
+      const now=performance.now();
+      const stagger=Math.max(16,Math.min(36,400/ev.spreadCells.length));
+      ev.spreadCells.forEach((c,idx)=>{
+        liteSpreadGrowth.set(c.id,{
+          startTime:now,
+          delay:idx*stagger,
+          duration:180
+        });
+      });
+      if(typeof fe!=='undefined')fe.dirty=true;
+    }
+  }
   const heavyEvents=L.events.filter(e=>e.kind==='special'&&e.heavyBoost);
   const events=L.events.filter(e=>['lite-drop','lite-buy','lite-special','lite-tool-choice','lite-extra-tool','lite-special-tool','lite-reward-enter','stage-start','lite-precise','v3-unused-buff-trigger'].includes(e.kind));const result=liteOriginalD3(...args);
   for(const e of events){
@@ -682,7 +715,7 @@ function liteSyncHeavyMarkers(){
     if(!cell.liteCoin)node.style.fontSize=Math.max(6,Math.min(10,width/(node.textContent.length*.65)))+'px';
   }
 }
-function liteFrame(){if(he){liteSyncHeavyMarkers();liteUpdateRevive();liteUpdateCompletion(performance.now());liteSync();litePlayPendingAcquisition();if(L.lite.roll?.adReadyAt){if(L.liteFinishRewardAd()){d3();liteUpdateReward();liteSaveSafe();se.play('turn');}else liteUpdateRefresh();}}}
+function liteFrame(){if(he){if(liteSpreadGrowth.size>0&&typeof fe!=='undefined')fe.dirty=true;liteSyncHeavyMarkers();liteUpdateRevive();liteUpdateCompletion(performance.now());liteSync();litePlayPendingAcquisition();if(L.lite.roll?.adReadyAt){if(L.liteFinishRewardAd()){d3();liteUpdateReward();liteSaveSafe();se.play('turn');}else liteUpdateRefresh();}}}
 // The authored HUD is an enhancement layer.  If a browser restores a page
 // before one of its optional nodes exists, keep the native scene renderer
 // alive instead of allowing one HUD exception to leave the canvas black.

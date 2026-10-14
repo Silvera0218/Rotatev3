@@ -723,21 +723,33 @@ test('diamond marks every same-colour cell at landing and triples marked score o
  const result=g.awardCells(g.board,'outline');assert.equal(result.diamondCellCount,4);assert.equal(result.diamondMultiplier,3);assert.equal(result.diamondBonus,8);assert.equal(result.points,21);
 });
 test('heavy drops each cell independently without losing a life, then starts the rotor turn',()=>{
- const g=make();g.active.liteEffect='heavy';g.active.x=2;g.drop(true);
+ const g=make();g.board=[{x:2,y:0,id:g.id++,type:'L'}];g.active.liteEffect='heavy';g.active.x=2;g.drop(true);
  assert.equal(g.lives,3);assert.equal(g.dropsUsed,1);assert.equal(g.phase,'rotating');
  assert.equal(g.events.filter(e=>e.heavyDrop).length,2);assert.equal(g.events.filter(e=>e.kind==='turn').length,1);
 });
-test('heavy block compresses blocks underneath it towards bottom-center',()=>{
+test('heavy block lands into position and eliminates up to 6 rows downwards per occupied column',()=>{
  const g=make();
- g.board=[{x:2,y:2,id:g.id++,type:'L'}];
+ for(let y=1;y>=-6;y--){g.board.push({x:2,y,id:g.id++,type:'L'});}
  g.active={type:'I',shape:[[0,0]],x:2,y:5,liteEffect:'heavy',color:'I'};
  g.liteLockHeavy();
- const movedCell=g.board.find(c=>c.id===1);
- assert(movedCell);
- // Prior to rotation, cell moved to (0, -1); rotated 90 deg CCW with torque lever 2 gives (-1, 0)
- assert.equal(movedCell.x,-1);
- assert.equal(movedCell.y || 0,0);
- assert(g.events.some(e=>e.kind==='compact'));
+ const specialEvent=g.events.find(e=>e.kind==='special'&&e.liteEffect==='heavy');
+ assert(specialEvent);
+ assert.equal(specialEvent.cells[0].x,2);
+ assert.equal(specialEvent.cells[0].y,2,'heavy cell should land at y = 2');
+ assert.equal(specialEvent.removed.length,6,'should eliminate 6 blocks downwards');
+ assert(specialEvent.scoring.points>0);
+ assert.equal(g.board.length,3,'8 initial blocks + 1 landed - 6 removed = 3 blocks remaining');
+});
+test('spread grows sequentially clockwise when center of gravity is to the right, and counterclockwise when to the left',()=>{
+ const gRight=make();gRight.board=[{x:3,y:0,id:gRight.id++,type:'L'}];
+ gRight.lite.tools.shovel=1;gRight.liteUseTool('shovel');
+ const evRight=gRight.events.find(e=>e.kind==='lite-tool'&&e.tool==='shovel');
+ assert.equal(evRight.direction,'cw');assert.equal(evRight.cog.x,3);
+
+ const gLeft=make();gLeft.board=[{x:-3,y:0,id:gLeft.id++,type:'L'}];
+ gLeft.lite.tools.shovel=1;gLeft.liteUseTool('shovel');
+ const evLeft=gLeft.events.find(e=>e.kind==='lite-tool'&&e.tool==='shovel');
+ assert.equal(evLeft.direction,'ccw');assert.equal(evLeft.cog.x,-3);
 });
 test('heavy and coin metadata follow rotations, repacks, dye and save reload; old extra turns are discarded',()=>{
  const g=make();g.board=[{x:1,y:0,id:g.id++,type:'L',liteHeavyBonus:12,liteCoin:true,liteEffect:'patch'},{x:-1,y:0,id:g.id++,type:'T'}];const id=g.board[0].id;

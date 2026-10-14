@@ -6118,7 +6118,7 @@ globalThis.ROTATION_LITE_LEVEL_DATA = {
     {id:'column',unlockStage:0,name:'变色方块',description:'落地后，将自身所在的整列染成同色'},
     {id:'patch',unlockStage:0,name:'金币方块',description:'消除时，按本次消除格数获得金币',detail:'落地后保留金币标记。消除时，每个金币格获得等同于本批消除格数的金币；多个金币格分别触发。铲除或重排消耗不发金币。'},
     {id:'glass',unlockStage:1,name:'玻璃方块',description:'落地后将一侧方块镜像至另一侧，生成方块变为玻璃方块',detail:'落地后，若位于转轴左侧，将左侧所有方块对称镜像至右侧（覆盖对应格，保留其余格）；若位于右侧则镜像至左侧。镜像生成方块转化为半透明玻璃方块（原侧方块不变），保留原色并可正常参与消除，且不受以方块颜色为条件的效果影响。4长条形方块若在中心对称掉落，则不触发镜像。'},
-    {id:'heavy',unlockStage:1,name:'超重方块',description:'落地后下落到底并压紧下方方块',detail:'落地后，尽可能把其下方的方块向底部-中心压紧，方块各格分别下落到无法继续下落的位置；落空不扣生命。结算下落后再旋转转轴。'},
+    {id:'heavy',unlockStage:1,name:'超重方块',description:'落地后按占用列数向下最多消除6行方块',detail:'各格分别独立下落至落位点，按占用列数向下最多消除6行方块；落空不扣生命。'},
     {id:'pack',unlockStage:2,name:'强迫症方块',description:'落地后，消耗自身将其余方块向内重排'},
     {id:'blast',unlockStage:3,name:'爆炸方块',description:'清除全部同色格，每格使本关分数增长3%',detail:'落地后清除全部同色格（含自身），正常计分。额外加分按触发前本关得分×（1.03的消除格数次方−1）计算，整批计算后四舍五入。'},
     {id:'diamond',unlockStage:3,name:'钻石方块',description:'同色标记格消除时分数×3',detail:'落地时标记棋盘上全部同色方块；这些格子消除时按基础分的3倍结算。标记会跟随方块移动、旋转和重排。'}
@@ -6137,7 +6137,7 @@ globalThis.ROTATION_LITE_LEVEL_DATA = {
     colorScoring: Object.freeze({version:'lite-connected-fibonacci-v1',lineMinimum:4,connectedMinimum:5,firstBonus:4,secondBonus:8,recurrenceEnd:10}),
     coinReward: 5, clearCoins: 5, toolPrice:5, shopSlots:8, buffs: BUFFS,
     tools: [
-      { id: 'shovel', unlockStage: 0, name: '蔓延', description: '沿当前已摆好的样式向外扩圈。', detail:'在当前已摆好的样式上，检测边界一圈，再加上新的一圈；每格颜色随机。' },
+      { id: 'shovel', unlockStage: 0, name: '蔓延', description: '沿当前已摆好的样式向外扩圈。', detail:'在当前已摆好的样式上，检测边界一圈，根据重心偏移方向依次顺时针或逆时针生长新的一圈；每格颜色随机。' },
       { id: 'swap', unlockStage: 0, name: '换块', description: '获得一个随机特殊方块。', detail:'优先填入装备槽；装备槽已满时进入暂存背包。' },
       { id: 'supply', unlockStage: 1, name: '补给箱', description: '增加本关总投放次数的10%', detail:'按使用时本关总投放次数的10%增加投放机会，四舍五入；总次数包含此前已增加的次数。' },
       { id: 'repair', unlockStage: 2, name: '生命之心', description: '恢复 1 次落空容错，最多 3 次。' },
@@ -6741,80 +6741,115 @@ globalThis.ROTATION_LITE_LEVEL_DATA = {
       this.active = null;
       this.chain = 0;
       this.chainPoints = 0;
-      const before = this.board.map(c => ({ ...c }));
-      const belowIds = new Set(this.board.filter(b => {
-        const colCells = raw.filter(c => c.x === b.x);
-        return colCells.length > 0 && b.y < Math.min(...colCells.map(c => c.y));
-      }).map(b => b.id));
 
-      const minTargetY = this.target?.cells?.length ? Math.min(...this.target.cells.map(c => c.y)) : -12;
-      const floorY = Math.min(minTargetY, ...(this.board.length ? this.board.map(c => c.y) : [minTargetY]));
-
-      let moved = false;
-      let changed = true;
-      let iterations = 0;
-      while (changed && iterations < 50) {
-        changed = false;
-        iterations++;
-        for (const c of this.board) {
-          if (!belowIds.has(c.id) && this.board.some(b => belowIds.has(b.id) && b.x === c.x && c.y < b.y)) {
-            belowIds.add(c.id);
-          }
-        }
-        const targets = this.board.filter(b => belowIds.has(b.id))
-          .sort((a, b) => a.y - b.y || Math.abs(a.x) - Math.abs(b.x));
-        for (const b of targets) {
-          const dirX = -Math.sign(b.x);
-          const candidates = [];
-          candidates.push({ dx: 0, dy: -1 });
-          if (dirX !== 0) candidates.push({ dx: dirX, dy: -1 });
-          if (dirX !== 0) candidates.push({ dx: dirX, dy: 0 });
-
-          for (const { dx, dy } of candidates) {
-            const nx = b.x + dx, ny = b.y + dy;
-            if (ny < floorY) continue;
-            if (this.valid([{ x: nx, y: ny, type: b.type }], this.board.filter(c => c.id !== b.id))) {
-              b.x = nx || 0;
-              b.y = ny || 0;
-              changed = true;
-              moved = true;
-              break;
-            }
-          }
-        }
-      }
-
+      // Drop each cell individually straight down in its column.
+      // A cell can only land if there is an obstacle below it:
+      // - an existing block in this.board in that column
+      // - or the rotor at (0, 0) if the cell is in column 0
+      // - or another cell from this piece that already landed in that column.
+      // If a cell has no obstacle below it, it has missed and vanishes immediately.
       const landed = [];
-      // Resolve each column from its lowest cell upward so the cells can stack
-      // naturally while every cell keeps its original x coordinate.
-      for (const source of raw.sort((a, b) => a.y - b.y || a.x - b.x)) {
-        let y = source.y;
-        while (this.valid([{ x: source.x, y: y - 1, type: source.type }], this.board.concat(landed))) y--;
-        const cell = { ...source, y, id: this.id++ };
-        delete cell.liteEffect;
-        cell.placementId = `${this.stage}:${cell.id}`;
-        cell.liteAttached = true;
-        landed.push(cell);
+      const sorted = raw.sort((a, b) => a.y - b.y || a.x - b.x);
+      for (const source of sorted) {
+        const col = source.x;
+        let highestY = null;
+        for (const b of this.board) {
+          if (b.x === col && b.y < source.y) {
+            if (highestY === null || b.y > highestY) highestY = b.y;
+          }
+        }
+        if (col === 0 && source.y > 0) {
+          if (highestY === null || 0 > highestY) highestY = 0;
+        }
+        for (const l of landed) {
+          if (l.x === col && l.y < source.y) {
+            if (highestY === null || l.y > highestY) highestY = l.y;
+          }
+        }
+
+        if (highestY === null) {
+          // No obstacle beneath this cell: it misses and vanishes!
+          continue;
+        }
+
+        const landingY = highestY + 1;
+        if (this.valid([{ x: col, y: landingY, type: source.type }], this.board.concat(landed))) {
+          const cell = { ...source, x: col, y: landingY, id: this.id++ };
+          delete cell.liteEffect;
+          cell.placementId = `${this.stage}:${cell.id}`;
+          cell.liteAttached = true;
+          landed.push(cell);
+        }
       }
-      // A heavy piece that misses the playable outline vanishes. It still
-      // consumes the throw, but never deals damage and never leaves a ghost cell.
-      const targetCells=this.target.cells, minX=Math.min(...targetCells.map(cell=>cell.x))-1, maxX=Math.max(...targetCells.map(cell=>cell.x))+1;
-      const supported = landed.some(cell => (cell.x>=minX&&cell.x<=maxX) || this.board.some(other => Math.abs(other.x-cell.x)<=1 && Math.abs(other.y-cell.y)<=1));
-      if (!supported) {
+
+      // If no cells could land, the entire heavy piece missed: vanishes with no damage/lives lost.
+      if (!landed.length) {
         this.lite.lastPlacementIds = [];
-        this.events.push({ kind:'special', effect:'heavy_drop', liteEffect:'heavy', cells:[], removed:[], contact:null, scoring:null, heavyDrop:true, missed:true });
+        this.events.push({
+          kind: 'special',
+          effect: 'heavy_drop',
+          liteEffect: 'heavy',
+          cells: [],
+          removed: [],
+          contact: null,
+          scoring: null,
+          heavyDrop: true,
+          missed: true
+        });
         this.checkDeadlock();
         if (this.phase === 'play') this.spawn();
         return true;
       }
+
+      // 1. First place landed cells into position ("下落后先按照当前效果落位")
       this.board.push(...landed);
       this.lite.lastPlacementIds = landed.map(cell => cell.id);
-      this.events.push({ kind: 'special', effect: 'heavy_drop', liteEffect: 'heavy', cells: landed.map(cell => ({ ...cell })), removed: [], contact: { x: landed.reduce((n, cell) => n + cell.x, 0) / landed.length, y: landed.reduce((n, cell) => n + cell.y, 0) / landed.length }, scoring: null, heavyDrop: true });
-      if (moved) this.events.push({ kind: 'compact', before });
+      const landedIds = new Set(landed.map(cell => cell.id));
+
+      // 2. Eliminate up to 6 rows downwards per occupied column ("然后按照超重方块的列数，向下最多消除6行方块")
+      const occupiedCols = [...new Set(landed.map(cell => cell.x))];
+      const removed = [];
+      for (const col of occupiedCols) {
+        const colLanded = landed.filter(cell => cell.x === col);
+        const minLandedY = Math.min(...colLanded.map(cell => cell.y));
+        const colCandidates = this.board.filter(b => b.x === col && b.y < minLandedY && (minLandedY - b.y <= 6) && !landedIds.has(b.id));
+        colCandidates.sort((a, b) => b.y - a.y);
+        removed.push(...colCandidates.slice(0, 6));
+      }
+
+      let scoring = null;
+      if (removed.length) {
+        const removedIds = new Set(removed.map(cell => cell.id));
+        this.board = this.board.filter(cell => !removedIds.has(cell.id));
+        scoring = this.awardCells(removed, 'tool');
+      }
+
       const lever = landed.length ? landed.reduce((n, cell) => n + cell.x, 0) / landed.length : 0;
       const torque = { lever, dir: lever >= 1 ? -1 : lever <= -1 ? 1 : 0 };
       this.lastTorque = torque;
-      this.events.push({ kind: 'lock', lever: torque.lever, cells: landed, contact: { x: lever, y: landed.reduce((n, cell) => n + cell.y, 0) / landed.length, }, contacts: [], ids: landed.map(cell => cell.id), heavyDrop: true });
+
+      this.events.push({
+        kind: 'special',
+        effect: 'heavy_drop',
+        liteEffect: 'heavy',
+        cells: landed.map(cell => ({ ...cell })),
+        removed,
+        scoring,
+        heavyDrop: true
+      });
+
+      this.events.push({
+        kind: 'lock',
+        lever: torque.lever,
+        cells: landed,
+        contact: { x: lever, y: landed.reduce((n, cell) => n + cell.y, 0) / landed.length },
+        contacts: [],
+        ids: landed.map(cell => cell.id),
+        heavyDrop: true
+      });
+
+      this.build.revision++;
+
       if (this.checkClear()) {
         this.lite.heavyRotationTorque = torque;
         return true;
@@ -6939,6 +6974,15 @@ globalThis.ROTATION_LITE_LEVEL_DATA = {
         const colors = ['I','J','L','O','S','T','Z'];
         const occupied = new Set(this.board.map(colorKey));
         const baseCells = this.board.length ? this.board : [{ x: 0, y: 0 }];
+        const cx = baseCells.reduce((sum, c) => sum + c.x, 0) / baseCells.length;
+        const cy = baseCells.reduce((sum, c) => sum + c.y, 0) / baseCells.length;
+
+        // Determine rotation direction by center of gravity offset:
+        // In RotateV3, positive x (right-heavy) rotates clockwise ('cw').
+        // Negative x (left-heavy) rotates counterclockwise ('ccw').
+        // If horizontal offset is 0, use vertical offset (cy >= 0 ? 'cw' : 'ccw').
+        const dir = cx > 0 ? 'cw' : cx < 0 ? 'ccw' : (cy >= 0 ? 'cw' : 'ccw');
+
         const DIRS = [
           [1, 0], [-1, 0], [0, 1], [0, -1],
           [1, 1], [1, -1], [-1, 1], [-1, -1]
@@ -6957,6 +7001,21 @@ globalThis.ROTATION_LITE_LEVEL_DATA = {
             }
           }
         }
+
+        // Sort ring cells sequentially by angle in the determined direction (cw / ccw),
+        // starting from the angle of the center of gravity.
+        const startAngle = (cx !== 0 || cy !== 0) ? Math.atan2(cy, cx) : Math.PI / 2;
+        ring.sort((a, b) => {
+          const angleA = Math.atan2(a.y, a.x);
+          const angleB = Math.atan2(b.y, b.x);
+          let diffA = dir === 'cw' ? (startAngle - angleA) % (2 * Math.PI) : (angleA - startAngle) % (2 * Math.PI);
+          if (diffA < 0) diffA += 2 * Math.PI;
+          let diffB = dir === 'cw' ? (startAngle - angleB) % (2 * Math.PI) : (angleB - startAngle) % (2 * Math.PI);
+          if (diffB < 0) diffB += 2 * Math.PI;
+          if (Math.abs(diffA - diffB) > 1e-4) return diffA - diffB;
+          return Math.hypot(a.x, a.y) - Math.hypot(b.x, b.y);
+        });
+
         const added = ring.map(cell => ({
           x: cell.x,
           y: cell.y,
@@ -6968,7 +7027,14 @@ globalThis.ROTATION_LITE_LEVEL_DATA = {
         if (!added.length) return false;
         this.board.push(...added);
         this.lite.lastPlacementIds = [];
-        this.events.push({ kind: 'lite-tool', tool: 'shovel', spreadCells: added.map(cell => ({ ...cell })), amount: added.length });
+        this.events.push({
+          kind: 'lite-tool',
+          tool: 'shovel',
+          spreadCells: added.map(cell => ({ ...cell })),
+          amount: added.length,
+          direction: dir,
+          cog: { x: cx, y: cy }
+        });
         this.deadlockCells = []; this.deadlockWarning = null;
         this.build.revision++;
       } else if (type === 'swap') {
@@ -14829,8 +14895,41 @@ function liteSync(){
   if(upcoming)liteText(I('next-caption'),'下一个 · '+liteSpecial(upcoming).name);
   I('growth-summary').hidden=true;
 }
+const liteSpreadGrowth=new Map();
+function liteGetSpreadScale(id){
+  const item=liteSpreadGrowth.get(id);
+  if(!item)return 1;
+  const now=performance.now();
+  const elapsed=now-(item.startTime+item.delay);
+  if(elapsed<=0)return 0.0001;
+  const p=Math.min(1,elapsed/item.duration);
+  if(p>=1){liteSpreadGrowth.delete(id);return 1;}
+  return Math.sin(p*Math.PI*0.5)+0.25*Math.sin(p*Math.PI)*(1-p);
+}
+if(typeof landingCellScale==='function'){
+  const liteOriginalLandingScale=landingCellScale;
+  landingCellScale=function(id){
+    return liteOriginalLandingScale(id)*liteGetSpreadScale(id);
+  };
+}
 const liteOriginalD3=d3;
 d3=function(...args){
+  const spreadEvents=L.events.filter(e=>e.kind==='lite-tool'&&e.tool==='shovel'&&!e._growthAnimated);
+  for(const ev of spreadEvents){
+    ev._growthAnimated=true;
+    if(ev.spreadCells?.length){
+      const now=performance.now();
+      const stagger=Math.max(16,Math.min(36,400/ev.spreadCells.length));
+      ev.spreadCells.forEach((c,idx)=>{
+        liteSpreadGrowth.set(c.id,{
+          startTime:now,
+          delay:idx*stagger,
+          duration:180
+        });
+      });
+      if(typeof fe!=='undefined')fe.dirty=true;
+    }
+  }
   const heavyEvents=L.events.filter(e=>e.kind==='special'&&e.heavyBoost);
   const events=L.events.filter(e=>['lite-drop','lite-buy','lite-special','lite-tool-choice','lite-extra-tool','lite-special-tool','lite-reward-enter','stage-start','lite-precise','v3-unused-buff-trigger'].includes(e.kind));const result=liteOriginalD3(...args);
   for(const e of events){
@@ -15393,7 +15492,7 @@ function liteSyncHeavyMarkers(){
     if(!cell.liteCoin)node.style.fontSize=Math.max(6,Math.min(10,width/(node.textContent.length*.65)))+'px';
   }
 }
-function liteFrame(){if(he){liteSyncHeavyMarkers();liteUpdateRevive();liteUpdateCompletion(performance.now());liteSync();litePlayPendingAcquisition();if(L.lite.roll?.adReadyAt){if(L.liteFinishRewardAd()){d3();liteUpdateReward();liteSaveSafe();se.play('turn');}else liteUpdateRefresh();}}}
+function liteFrame(){if(he){if(liteSpreadGrowth.size>0&&typeof fe!=='undefined')fe.dirty=true;liteSyncHeavyMarkers();liteUpdateRevive();liteUpdateCompletion(performance.now());liteSync();litePlayPendingAcquisition();if(L.lite.roll?.adReadyAt){if(L.liteFinishRewardAd()){d3();liteUpdateReward();liteSaveSafe();se.play('turn');}else liteUpdateRefresh();}}}
 // The authored HUD is an enhancement layer.  If a browser restores a page
 // before one of its optional nodes exists, keep the native scene renderer
 // alive instead of allowing one HUD exception to leave the canvas black.
