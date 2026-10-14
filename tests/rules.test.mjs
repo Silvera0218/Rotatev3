@@ -727,7 +727,7 @@ test('heavy drops each cell independently without losing a life, then starts the
  assert.equal(g.lives,3);assert.equal(g.dropsUsed,1);assert.equal(g.phase,'rotating');
  assert.equal(g.events.filter(e=>e.heavyDrop).length,2);assert.equal(g.events.filter(e=>e.kind==='turn').length,1);
 });
-test('heavy block lands into position and eliminates up to 6 rows downwards per occupied column',()=>{
+test('heavy block lands into position and eliminates up to 6 rows downwards per occupied column, self-eliminating to avoid hanging',()=>{
  const g=make();
  for(let y=1;y>=-6;y--){g.board.push({x:2,y,id:g.id++,type:'L'});}
  g.active={type:'I',shape:[[0,0]],x:2,y:5,liteEffect:'heavy',color:'I'};
@@ -736,9 +736,10 @@ test('heavy block lands into position and eliminates up to 6 rows downwards per 
  assert(specialEvent);
  assert.equal(specialEvent.cells[0].x,2);
  assert.equal(specialEvent.cells[0].y,2,'heavy cell should land at y = 2');
- assert.equal(specialEvent.removed.length,6,'should eliminate 6 blocks downwards');
+ assert.equal(specialEvent.removed.length,7,'should eliminate 6 blocks downwards plus the heavy block itself');
  assert(specialEvent.scoring.points>0);
- assert.equal(g.board.length,3,'8 initial blocks + 1 landed - 6 removed = 3 blocks remaining');
+ assert.equal(g.board.length,2,'8 initial blocks - 6 removed = 2 blocks remaining, heavy block not left hanging');
+ assert(!g.board.some(c=>c.x===2&&c.y===2),'heavy block cell is not on board');
 });
 test('spread grows sequentially clockwise when center of gravity is to the right, and counterclockwise when to the left',()=>{
  const gRight=make();gRight.board=[{x:3,y:0,id:gRight.id++,type:'L'}];
