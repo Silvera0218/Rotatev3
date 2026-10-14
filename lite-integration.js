@@ -337,7 +337,7 @@ function liteOpenShopDetail(offer,button,event){
 function liteCreateReward(){
   if(liteRewardPanel)return;
   liteRewardPanel=document.createElement('section');liteRewardPanel.id='lite-reward-panel';liteRewardPanel.hidden=true;
-  liteRewardPanel.innerHTML='<div id="lite-reward-heading"><h2 id="lite-reward-title">补给站</h2><div class="v3-supply-actions"><button id="v3-shop-open" type="button" aria-label="打开道具商店"><img src="./assets/icons/shop-cart.svg" width="26" height="26" alt=""><span class="v3-shop-btn-text"><span class="v3-shop-btn-main">商店</span><span class="v3-shop-btn-sub"></span></span><span class="v3-shop-badge" id="v3-shop-badge" aria-hidden="true" hidden>!</span></button><span id="lite-shop-wallet"></span></div></div><p id="lite-reward-summary">免费补给 · 选择一件</p><div id="v3-reward-choices"></div><div id="lite-choice-refresh"><button id="lite-refresh-reward" type="button"></button><span id="lite-refresh-status" role="status"></span></div><div id="lite-shop" hidden><nav id="lite-shop-categories" aria-label="商品分类"></nav><div id="lite-shop-offers"></div></div><button id="lite-next" type="button" hidden>返回补给</button>';
+  liteRewardPanel.innerHTML='<div id="lite-reward-heading"><h2 id="lite-reward-title">补给站</h2><div class="v3-supply-actions"><button id="v3-shop-open" type="button" aria-label="打开道具商店"><img src="./assets/icons/shop-cart.svg" width="26" height="26" alt=""><span class="v3-shop-btn-text"><span class="v3-shop-btn-main">商店</span><span class="v3-shop-btn-sub"></span></span><span class="v3-shop-badge" id="v3-shop-badge" aria-hidden="true" hidden>!</span></button><span id="lite-shop-wallet"></span></div></div><p id="lite-reward-summary">免费补给 · 选择一件</p><div id="v3-reward-choices"></div><div id="lite-choice-refresh"><button id="lite-confirm-reward" type="button" hidden>确认领取</button><button id="lite-refresh-reward" type="button"></button><span id="lite-refresh-status" role="status"></span></div><div id="lite-shop" hidden><nav id="lite-shop-categories" aria-label="商品分类"></nav><div id="lite-shop-offers"></div></div><button id="lite-next" type="button" hidden>返回补给</button>';
   const hero=document.createElement('header');hero.id='lite-shop-hero';hero.hidden=true;hero.innerHTML='<div class="lite-shop-hero-inner"><img src="./assets/ui/shopkeeper.png" width="128" height="128" alt="机器人店员"><div><span>SHOP</span><h2>道具商店</h2></div></div>';
   I('overlay').querySelector('.dialog').append(hero,liteRewardPanel);
   for(const [id,label] of [['all','全部'],['tool','道具'],['special','特殊方块']]){
@@ -356,7 +356,36 @@ function liteCreateReward(){
     liteSaveSafe();
   };
   I('lite-next').onclick=()=>{L.lite.roll.shopOpen=false;liteUpdateReward();liteSaveSafe();};
-  I('lite-refresh-reward').onclick=event=>{const r=L.lite.roll;if(r.settled){liteContinueAfterReward(I('lite-refresh-reward'),event);return;}const changed=r.freeRefreshes>0?L.liteRefreshReward():L.liteStartRewardAd();if(changed){d3();se.play('turn');liteUpdateReward();liteSaveSafe();}};
+  const confirmBtn=I('lite-confirm-reward');
+  if(confirmBtn){
+    confirmBtn.onclick=()=>{
+      const r=L.lite.roll;
+      if(!r||r.settled||!r.selectedTool||r.adReadyAt)return;
+      const toolId=r.selectedTool;
+      if(!L.liteChooseTool(toolId))return;
+      liteSync();
+      d3();
+      liteUpdateReward();
+      liteSaveSafe();
+      se.play('clear');
+      I('lite-refresh-reward').focus({preventScroll:true});
+    };
+  }
+  I('lite-refresh-reward').onclick=event=>{
+    const r=L.lite.roll;
+    if(r.settled){
+      liteContinueAfterReward(I('lite-refresh-reward'),event);
+      return;
+    }
+    const changed=r.freeRefreshes>0?L.liteRefreshReward():L.liteStartRewardAd();
+    if(changed){
+      r.selectedTool=null;
+      d3();
+      se.play('turn');
+      liteUpdateReward();
+      liteSaveSafe();
+    }
+  };
 }
 function liteContinueAfterReward(origin=liteRewardPanel,event){
   const roll=L.lite.roll;if(!roll?.settled||liteRewardAdvance===roll||me.active)return;
@@ -372,7 +401,8 @@ function liteUpdateReward(){
   const shop=!!roll.shopOpen;I('overlay').dataset.litePage=shop?'shop':'supply';liteRewardPanel.dataset.page=shop?'shop':'supply';
   I('lite-shop-hero').hidden=!shop;I('lite-shop').hidden=!shop;I('lite-next').hidden=!shop;
   I('v3-reward-choices').hidden=shop;I('lite-choice-refresh').hidden=shop;I('v3-shop-open').hidden=shop;I('lite-reward-summary').hidden=shop;
-  I('lite-reward-summary').textContent=roll.chosenTool?'已领取 '+liteTool(roll.chosenTool).name+' ×1':'免费补给 · 选择一件';
+  if(roll.selectedTool&&!roll.toolOptions.includes(roll.selectedTool))roll.selectedTool=null;
+  I('lite-reward-summary').textContent=roll.chosenTool?'已领取 '+liteTool(roll.chosenTool).name+' ×1':(roll.selectedTool?'已选中 '+liteTool(roll.selectedTool).name+' · 点击下方确认领取':'免费补给 · 选择一件');
   I('lite-reward-title').textContent=shop?'道具商店':'补给站';I('dialog-tag').textContent=shop?'ROTATION V3 · 商店':'ROTATION V3 · 三选一';
   I('lite-shop-wallet').textContent=`${L.lite.coins} 金币`;
   const shopBtn=I('v3-shop-open');
@@ -398,12 +428,27 @@ function liteUpdateReward(){
   for(const id of roll.toolOptions){
     const tool=liteTool(id),button=document.createElement('button');button.className='v3-reward-choice';button.type='button';button.dataset.tool=id;button.dataset.kind=tool.blockEffect?'special':'tool';button.disabled=roll.settled||!!roll.adReadyAt;
     const isNew=((tool.unlockStage??0)===L.stage&&(tool.unlockStage??0)>0)||unseenIds.has(id);
+    const isSelected=roll.selectedTool===id&&!roll.settled;
     button.dataset.new=String(isNew);
-    button.innerHTML='<span class="v3-choice-art">'+liteIcon(id)+'</span><span class="v3-choice-copy"><div class="v3-choice-head"><small></small><span class="v3-choice-new-tag"'+(isNew?'':' hidden')+'>NEW!</span></div><strong></strong><span class="v3-choice-desc"></span></span><b>+1</b><span class="v3-choice-claim">领取 <i>→</i></span>';
-    button.querySelector('small').textContent=tool.blockEffect?'特殊方块':'道具';button.querySelector('strong').textContent=tool.name;button.querySelector('.v3-choice-desc').textContent=tool.description;
+    button.dataset.selected=String(isSelected);
     button.dataset.claimed=String(roll.chosenTool===id);
-    if(roll.settled){button.querySelector('.v3-choice-claim').textContent=roll.chosenTool===id?'已领取':'未选择';button.querySelector('b').textContent=roll.chosenTool===id?'✓':'';}
-    button.onclick=()=>{if(!L.liteChooseTool(id))return;liteSync();d3();liteUpdateReward();liteSaveSafe();se.play('clear');I('lite-refresh-reward').focus({preventScroll:true});};choices.append(button);
+    button.innerHTML='<span class="v3-choice-art">'+liteIcon(id)+'</span><span class="v3-choice-copy"><div class="v3-choice-head"><small></small><span class="v3-choice-new-tag"'+(isNew?'':' hidden')+'>NEW!</span></div><strong></strong><span class="v3-choice-desc"></span></span><b>+1</b><span class="v3-choice-claim">选择 <i>→</i></span>';
+    button.querySelector('small').textContent=tool.blockEffect?'特殊方块':'道具';button.querySelector('strong').textContent=tool.name;button.querySelector('.v3-choice-desc').textContent=tool.description;
+    if(roll.settled){
+      button.querySelector('.v3-choice-claim').textContent=roll.chosenTool===id?'已领取':'未选择';
+      button.querySelector('b').textContent=roll.chosenTool===id?'✓':'';
+    }else if(isSelected){
+      button.querySelector('.v3-choice-claim').innerHTML='已选中 <i>✓</i>';
+      button.querySelector('b').textContent='✓';
+    }
+    button.onclick=()=>{
+      if(roll.settled||roll.adReadyAt)return;
+      roll.selectedTool=(roll.selectedTool===id?null:id);
+      se.play('turn');
+      liteUpdateReward();
+      liteSaveSafe();
+    };
+    choices.append(button);
   }
   const category=roll.shopCategory||'all';for(const b of I('lite-shop-categories').children)b.setAttribute('aria-pressed',String(b.dataset.category===category));
   const offers=I('lite-shop-offers');offers.replaceChildren();
@@ -420,10 +465,36 @@ function liteUpdateReward(){
 }
 function liteUpdateRefresh(){
   const r=L.lite.roll;if(!r||!I('lite-refresh-reward'))return;
-  const button=I('lite-refresh-reward'),free=r.freeRefreshes,ads=r.adRefreshes,waiting=!!r.adReadyAt;
-  button.dataset.action=r.settled?'next':'refresh';button.disabled=r.settled?liteRewardAdvance===r:waiting||(!free&&!ads);liteText(button,r.settled?'下一关':waiting?'观看中…':free?'免费刷新':ads?'看广告刷新':'刷新次数已用完');
-  I('lite-refresh-status').hidden=r.settled;
-  liteText(I('lite-refresh-status'),waiting?'广告播放中…':`免费 ${free} 次 · 广告 ${ads} 次`);
+  const confirmBtn=I('lite-confirm-reward'),refreshBtn=I('lite-refresh-reward'),statusSpan=I('lite-refresh-status');
+  const free=r.freeRefreshes,ads=r.adRefreshes,waiting=!!r.adReadyAt;
+
+  if(r.settled){
+    if(confirmBtn)confirmBtn.hidden=true;
+    refreshBtn.hidden=false;
+    refreshBtn.dataset.action='next';
+    refreshBtn.disabled=liteRewardAdvance===r;
+    liteText(refreshBtn,'下一关');
+    if(statusSpan)statusSpan.hidden=true;
+  }else{
+    if(r.selectedTool){
+      if(confirmBtn){
+        confirmBtn.hidden=false;
+        confirmBtn.disabled=waiting;
+        const tool=liteTool(r.selectedTool);
+        liteText(confirmBtn,`确认领取 ${tool.name}`);
+      }
+    }else{
+      if(confirmBtn)confirmBtn.hidden=true;
+    }
+    refreshBtn.hidden=false;
+    refreshBtn.dataset.action='refresh';
+    refreshBtn.disabled=waiting||(!free&&!ads);
+    liteText(refreshBtn,waiting?'观看中…':free?'免费刷新':ads?'看广告刷新':'刷新次数已用完');
+    if(statusSpan){
+      statusSpan.hidden=false;
+      liteText(statusSpan,waiting?'广告播放中…':`免费 ${free} 次 · 广告 ${ads} 次`);
+    }
+  }
 }
 
 // Keep the clear acknowledgement on the board, before opening the dice destination.

@@ -490,6 +490,20 @@ test('choice refresh allows free once then three timed ads, rejects early/double
  }
  assert.equal(g.liteStartRewardAd(20000),false);assert.equal(g.liteChooseTool(r.toolOptions[0]),true);assert.equal(g.liteRefreshReward(),false);
 });
+test('supply station supports selection before confirmation and changing choice',()=>{
+ const g=make(),r=complete(g);
+ assert.equal(r.selectedTool,null);assert.equal(r.settled,false);assert.equal(r.chosenTool,null);
+ const [opt0,opt1]=r.toolOptions;
+ const before0=g.lite.tools[opt0]||0,before1=g.lite.tools[opt1]||0;
+ r.selectedTool=opt0;
+ assert.equal(r.settled,false);assert.equal(g.lite.tools[opt0]||0,before0);
+ r.selectedTool=opt1;
+ assert.equal(r.settled,false);assert.equal(g.lite.tools[opt1]||0,before1);
+ assert.equal(g.liteChooseTool(r.selectedTool),true);
+ assert.equal(r.settled,true);assert.equal(r.chosenTool,opt1);assert.equal(r.selectedTool,null);
+ assert.equal(g.lite.tools[opt1],before1+1);assert.equal(g.lite.tools[opt0]||0,before0);
+ assert.equal(g.liteChooseTool(opt0),false);
+});
 test('shop repeats purchases with independent Fibonacci prices, keeps choices and persists prices across stages',()=>{
  const g=make();g.stage=3;const r=complete(g);assert.equal(r.shopOffers.length,8);assert.equal(r.shopOffers.filter(o=>o.kind==='tool').length,4);assert.equal(r.shopOffers.filter(o=>o.kind==='special').length,4);assert.equal(new Set(r.shopOffers.map(o=>o.kind+o.item)).size,8);
  // SymPy: 5 * fibonacci(n + 2), n = 0..7.

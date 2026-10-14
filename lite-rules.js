@@ -1011,14 +1011,14 @@
       this.liteEnsureExpansion();
       this.liteAwardClearCoins();
       if(this.lite.roll?.route==='tool'&&this.lite.roll.entered)return this.lite.roll;
-      return this.lite.roll={route:'tool',entered:true,settled:false,toolOptions:this.liteRewardOptions(),shopOffers:this.liteCreateShop(),chosenTool:null,tools:{},freeRefreshes:1,adRefreshes:3,adReadyAt:null,coins:0,combo:null};
+      return this.lite.roll={route:'tool',entered:true,settled:false,toolOptions:this.liteRewardOptions(),shopOffers:this.liteCreateShop(),chosenTool:null,selectedTool:null,tools:{},freeRefreshes:1,adRefreshes:3,adReadyAt:null,coins:0,combo:null};
     };
     p.liteCanRefreshReward = function () {
       const r=this.lite.roll;return !!(rewardPhase(this)&&r?.entered&&!r.settled&&r.route==='tool');
     };
     p.liteRefreshReward = function () {
       const r=this.lite.roll;if(!this.liteCanRefreshReward()||r.adReadyAt!==null||r.freeRefreshes<=0)return false;
-      r.freeRefreshes--;r.toolOptions=this.liteRewardOptions('tool',r.toolOptions);
+      r.freeRefreshes--;r.toolOptions=this.liteRewardOptions('tool',r.toolOptions);r.selectedTool=null;
       this.events.push({kind:'lite-refresh',route:'tool'});return true;
     };
     p.liteStartRewardAd = function (now=Date.now()) {
@@ -1027,14 +1027,14 @@
     };
     p.liteFinishRewardAd = function (now=Date.now()) {
       const r=this.lite.roll;if(!Number.isFinite(now)||!this.liteCanRefreshReward()||r.adReadyAt===null||now<r.adReadyAt||r.adRefreshes<=0)return false;
-      r.adRefreshes--;r.adReadyAt=null;r.toolOptions=this.liteRewardOptions('tool',r.toolOptions);
+      r.adRefreshes--;r.adReadyAt=null;r.toolOptions=this.liteRewardOptions('tool',r.toolOptions);r.selectedTool=null;
       this.events.push({kind:'lite-refresh',route:'tool'});return true;
     };
     p.liteChooseTool = function (id) {
       const r=this.lite.roll;
       if(!rewardPhase(this)||!r?.entered||r.route!=='tool'||r.settled||r.adReadyAt!==null||!r.toolOptions?.includes(id))return false;
       this.liteGrantTool(id);
-      r.tools[id]=1;r.chosenTool=id;r.settled=true;
+      r.tools[id]=1;r.chosenTool=id;r.settled=true;r.selectedTool=null;
       this.events.push({kind:'lite-tool-choice',id});return true;
     };
     p.liteSkipReward = function () {
