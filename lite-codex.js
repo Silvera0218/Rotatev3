@@ -19,7 +19,7 @@ globalThis.createRotationCodex=function({config,makeGame,entry,onResume,onHome})
     const g=makeGame();g.events=[];g.board=[[-1,-1,'T'],[0,-1,'L'],[1,-1,'L'],[-1,0,'S'],[1,0,'L'],[-1,1,'T'],[2,0,'S'],[3,0,'S'],[1,3,'T']].map(([x,y,type])=>({x,y,type,id:g.id++}));
     let before=clone(g.board),after,from=[],to=[],removed=[],note='',mode='board';
     if(item.blockEffect){
-      const pos=[[0,1],[0,2]];
+      const pos=item.blockEffect==='glass'||item.blockEffect==='trim'?[[-1,1],[-1,2]]:[[0,1],[0,2]];
       const cells=pos.map(([x,y])=>({x,y,type:'L',id:g.id++,liteEffect:item.blockEffect}));from=clone(cells);g.board.push(...cells);before=clone(g.board);g.checkpointScore=100;g.score=100;g.levelScore=100;
       g.liteAfterAttach(cells);const result=g.resolvePendingSpecial();
       if(item.blockEffect==='heavy')for(const cell of g.board)delete cell.liteHeavyBonus;
@@ -27,9 +27,9 @@ globalThis.createRotationCodex=function({config,makeGame,entry,onResume,onHome})
       if(item.blockEffect==='heavy')mode='heavy';
       if(item.blockEffect==='patch'){mode='coin';const score=g.awardCells(g.board,'outline');note='消除 '+g.board.length+' 格 · 金币 +'+score.coinReward;g.board=[];}
       after=clone(g.board);to=after.filter(c=>cells.some(a=>a.id===c.id));removed=before.filter(c=>!after.some(a=>a.id===c.id));
-      const notes={column:'整列染成同色',blast:'本关 100 分 → 爆炸得分 +'+(result.scoring?.points||0),trim:'框外清除，框内保留',patch:note,pack:'向转轴中心重排',heavy:'每格分别下落到底 · 不扣生命',diamond:'标记同色格 · 消除时分数×3'};note=notes[item.blockEffect];
+      const notes={column:'整列染成同色',blast:'本关 100 分 → 爆炸得分 +'+(result.scoring?.points||0),glass:'左侧所有方块镜像至右侧 · 生成方块变为玻璃方块',trim:'左侧所有方块镜像至右侧 · 生成方块变为玻璃方块',patch:note,pack:'向转轴中心重排',heavy:'每格分别下落到底 · 下方方块向底部-中心压紧',diamond:'标记同色格 · 消除时分数×3'};note=notes[item.blockEffect];
     }else if(item.id==='shovel'){
-      g.lite.tools.shovel=1;g.liteUseTool('shovel');after=clone(g.board);from=clone(before);to=clone(after);note='随机颜色填补最外围两圈';
+      g.lite.tools.shovel=1;g.liteUseTool('shovel');after=clone(g.board);from=clone(before);to=clone(after);note='沿当前已摆好的样式向外扩圈';
     }else if(item.id==='dye'||item.id==='swap'){
       g.active={type:'T',color:'T',shape:[[0,0],[1,0],[0,1]],x:0,y:3};g.next='L';g.nextColor='L';g.nextShape=[[0,0],[0,1],[0,2],[1,0]];from=clone(g.cells());g.lite.tools[item.id]=1;g.liteUseTool(item.id);g.active.x=0;g.active.y=3;to=clone(g.cells());after=before;mode='piece';note=item.id==='dye'?'落块染成棋盘主色':'当前落块换成下一块';
     }else if(item.id==='supply'||item.id==='repair'){
@@ -38,7 +38,7 @@ globalThis.createRotationCodex=function({config,makeGame,entry,onResume,onHome})
     return{before,after,from,to,removed,note,mode};
   }
   const colors={I:'#65d9f0',O:'#ffe574',T:'#b68bff',S:'#b4ed61',Z:'#ff738e',L:'#ffac63',J:'#6799f6'};
-  function tile(x,y,type,alpha=1,effect){ctx.globalAlpha=alpha;const size=25,px=320+x*27,py=214-y*27;const img=images.get('block-'+effect);if(effect&&img?.complete&&img.naturalWidth)ctx.drawImage(img,px-size/2,py-size/2,size,size);else{ctx.fillStyle='#263c70';ctx.fillRect(px-13,py-13,26,26);ctx.fillStyle=colors[type]||colors.L;ctx.fillRect(px-11,py-11,22,22);ctx.fillStyle='#ffffff88';ctx.fillRect(px-10,py-10,19,3);ctx.fillRect(px-10,py-10,3,19);}ctx.globalAlpha=1;}
+  function tile(x,y,type,alpha=1,effect,isGlass=false){ctx.globalAlpha=alpha;const size=25,px=320+x*27,py=214-y*27;const img=images.get('block-'+effect);if(effect&&img?.complete&&img.naturalWidth)ctx.drawImage(img,px-size/2,py-size/2,size,size);else if(isGlass){ctx.save();ctx.fillStyle=colors[type]||colors.L;ctx.globalAlpha=alpha*.55;ctx.fillRect(px-12,py-12,24,24);ctx.strokeStyle='#ffffff';ctx.lineWidth=1.5;ctx.globalAlpha=alpha*.9;ctx.strokeRect(px-12,py-12,24,24);ctx.fillStyle='#ffffff';ctx.globalAlpha=alpha*.4;ctx.beginPath();ctx.moveTo(px-10,py-10);ctx.lineTo(px+4,py-10);ctx.lineTo(px-10,py+4);ctx.closePath();ctx.fill();ctx.restore();}else{ctx.fillStyle='#263c70';ctx.fillRect(px-13,py-13,26,26);ctx.fillStyle=colors[type]||colors.L;ctx.fillRect(px-11,py-11,22,22);ctx.fillStyle='#ffffff88';ctx.fillRect(px-10,py-10,19,3);ctx.fillRect(px-10,py-10,3,19);}ctx.globalAlpha=1;}
   const ease=t=>1-(1-Math.max(0,Math.min(1,t)))**3;
   function paint(elapsed){
     if(!scenario)return;const s=scenario,phase=elapsed%5600,t=Math.max(0,Math.min(1,(phase-1700)/900)),u=ease(t);
@@ -48,8 +48,10 @@ globalThis.createRotationCodex=function({config,makeGame,entry,onResume,onHome})
       const target=s.after.find(a=>a.id===cell.id),moving=s.from.some(a=>a.id===cell.id);
       if(!target){tile(cell.x+(t>0?Math.sign(cell.x||1)*u*.8:0),cell.y,cell.type,1-u,cell.liteEffect);continue;}
       const fall=moving&&phase<1700?(1-ease(phase/1400))*4:0;
-      tile(cell.x+(target.x-cell.x)*u,cell.y+(target.y-cell.y)*u+fall,t>.45?target.type:cell.type,1,phase<1700?cell.liteEffect:null);
+      tile(cell.x+(target.x-cell.x)*u,cell.y+(target.y-cell.y)*u+fall,t>.45?target.type:cell.type,1,phase<1700?cell.liteEffect:null,t>.45&&target.liteGlass);
     }
+    const added=s.after.filter(a=>!s.before.some(b=>b.id===a.id));
+    if(t>0)for(const cell of added)tile(cell.x,cell.y,cell.type,u,null,cell.liteGlass);
     ctx.fillStyle='#d8ff30';ctx.fillRect(310,204,20,20);ctx.strokeStyle='#294780';ctx.lineWidth=3;ctx.strokeRect(310,204,20,20);ctx.beginPath();ctx.arc(320,214,5,0,Math.PI*2);ctx.stroke();
     if(s.mode==='piece')for(const c of t>.5?s.to:s.from)tile(c.x,c.y,c.type);
     if(s.mode==='supply'||s.mode==='repair'){

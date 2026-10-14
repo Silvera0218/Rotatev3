@@ -7,11 +7,37 @@ import {loadEngine,settle} from '../tools/load-engine.mjs';
 const original=loadEngine(null,fileURLToPath(new URL('../index.html',import.meta.url)));
 const context=vm.createContext({console,structuredClone,performance});
 vm.runInContext(original.source,context);
+vm.runInContext(fs.readFileSync(new URL('../lite-levels.js',import.meta.url),'utf8'),context);
 vm.runInContext(fs.readFileSync(new URL('../lite-rules.js',import.meta.url),'utf8'),context);
 vm.runInContext('installRotationLite(api)',context);
 const ctx=context;
 const scripted=(g,values)=>{let index=0;g.liteRandom=()=>values[index++]??.99;};
 const make=()=>new context.api.Game(42);
+// The editor rewrites lite-levels.js whenever the level author saves, so fixtures
+// that depend on exact authored geometry run on the built-in route instead of the
+// editable data file.  The route snapshot test uses the same context.
+const route=vm.createContext({console,structuredClone,performance});
+vm.runInContext(original.source,route);
+vm.runInContext(fs.readFileSync(new URL('../lite-rules.js',import.meta.url),'utf8'),route);
+vm.runInContext('installRotationLite(api)',route);
+const makeRoute=()=>new route.api.Game(42);
+// One level with two outlines followed by a single-outline level, so the in-level
+// outline switch can be exercised without touching the editor data.  Goals sit far
+// above what a couple of clears score, which keeps the score gate out of the way.
+const phaseRoute={version:1,levels:[
+  {id:'two-outlines',name:'双轮廓关',phases:[
+    {id:'small',name:'小轮廓',style:'geometry',goal:4000,drops:10,cells:[[-1,1],[0,1],[1,1],[-1,0],[1,0],[-1,-1],[0,-1],[1,-1]]},
+    {id:'large',name:'大轮廓',style:'geometry',goal:9999,drops:1,cells:[[-2,2],[-1,2],[0,2],[1,2],[2,2],[-2,1],[-1,1],[0,1],[1,1],[2,1],[-2,0],[-1,0],[1,0],[2,0],[-2,-1],[-1,-1],[0,-1],[1,-1],[2,-1],[-2,-2],[-1,-2],[0,-2],[1,-2],[2,-2]]}
+  ]},
+  {id:'solo',name:'第二关',phases:[{id:'solo-outline',name:'单轮廓',style:'geometry',goal:65,drops:8,cells:[[0,2],[-1,1],[0,1],[1,1],[-2,0],[-1,0],[1,0],[2,0],[-1,-1],[0,-1],[1,-1],[0,-2]]}]}
+]};
+const phaseContext=vm.createContext({console,structuredClone,performance,__routeText:JSON.stringify(phaseRoute)});
+vm.runInContext(original.source,phaseContext);
+vm.runInContext('globalThis.ROTATION_LITE_LEVEL_DATA=JSON.parse(globalThis.__routeText);delete globalThis.__routeText;',phaseContext);
+vm.runInContext(fs.readFileSync(new URL('../lite-rules.js',import.meta.url),'utf8'),phaseContext);
+vm.runInContext('installRotationLite(api)',phaseContext);
+const makePhase=()=>new phaseContext.api.Game(42);
+const fillOutline=g=>{g.phase='play';g.board=g.target.cells.map((c,i)=>({...c,id:g.id++,type:i%2?'T':'S'}));return g;};
 
 test('inventory uses three kinds, stacks duplicates and promotes reserves in acquisition order',()=>{
   const g=make();g.liteGrantTool('supply');g.liteGrantTool('block-heavy');g.liteGrantTool('repair');g.liteGrantTool('block-heavy');
@@ -23,21 +49,21 @@ test('inventory uses three kinds, stacks duplicates and promotes reserves in acq
   assert.deepEqual(Array.from(g.liteInventory().reserve),['repair']);
 });
 test('inventory reorder, saved order and reacquisition keep one position per kind',()=>{
-  const g=make();for(const id of ['supply','repair','block-trim'])g.liteGrantTool(id);
-  assert.equal(g.liteMoveTool('block-trim',2),true);
-  assert.deepEqual(Array.from(g.liteInventory().active),['shovel','swap','block-trim']);
+  const g=make();for(const id of ['supply','repair','block-glass'])g.liteGrantTool(id);
+  assert.equal(g.liteMoveTool('block-glass',2),true);
+  assert.deepEqual(Array.from(g.liteInventory().active),['shovel','swap','block-glass']);
   const h=make();h.lite=JSON.parse(JSON.stringify(g.lite));h.liteEnsureExpansion();
   assert.deepEqual(Array.from(h.liteInventory().order),Array.from(g.liteInventory().order));
-  h.liteMoveTool('swap',4);assert.deepEqual(Array.from(h.liteInventory().active),['shovel','block-trim','supply']);
+  h.liteMoveTool('swap',4);assert.deepEqual(Array.from(h.liteInventory().active),['shovel','block-glass','supply']);
   h.liteUseTool('supply');h.liteGrantTool('supply');assert.equal(h.liteInventory().order.at(-1),'supply');
   assert.equal(h.liteMoveTool('repair',-1),false);assert.equal(h.liteMoveTool('unknown',0),false);
 });
 test('shop and free reward put excess kinds in reserve and preserve them across stages',()=>{
   const g=make();g.liteGrantTool('supply');const r=complete(g);g.lite.coins=100;
-  r.shopOffers=[{slot:0,kind:'special',item:'trim'}];assert.equal(g.liteBuyOffer(0),true);
+  r.shopOffers=[{slot:0,kind:'special',item:'glass'}];assert.equal(g.liteBuyOffer(0),true);
   r.toolOptions=['repair'];assert.equal(g.liteChooseTool('repair'),true);
-  assert.deepEqual(Array.from(g.liteInventory().reserve),['block-trim','repair']);
-  assert.equal(g.liteNext(),true);assert.deepEqual(Array.from(g.liteInventory().reserve),['block-trim','repair']);
+  assert.deepEqual(Array.from(g.liteInventory().reserve),['block-glass','repair']);
+  assert.equal(g.liteNext(),true);assert.deepEqual(Array.from(g.liteInventory().reserve),['block-glass','repair']);
 });
 
 test('special tools consume on first use and ignore retired upgrade fields from saves',()=>{
@@ -64,6 +90,17 @@ const colourFixture = (coords, extras = []) => {
   for (const [x,y,type] of extras) g.board.push({x,y,type,id:g.id++});
   return g;
 };
+const colourRoute = (coords, extras = []) => {
+  const g = makeRoute();
+  g.board = g.target.cells.map((c, i) => ({ ...c, id:g.id++, type:i % 2 ? 'T' : 'S' }));
+  for (const [x,y] of coords) {
+    const existing = g.board.find(c => c.x === x && c.y === y);
+    if (existing) existing.type = 'L';
+    else g.board.push({x,y,id:g.id++,type:'L'});
+  }
+  for (const [x,y,type] of extras) g.board.push({x,y,type,id:g.id++});
+  return g;
+};
 
 const fill=(g,coords=[],effect=null)=>{
  g.phase='play';g.board=g.target.cells.map((c,i)=>({...c,id:g.id++,type:i%2?'T':'S'}));
@@ -77,7 +114,7 @@ const material=(g,coord,effect,placementId)=>({...coord,id:g.id++,type:'L',liteE
 test('outline clear includes a whole bent same-colour component across its boundary in all rotations', () => {
   let shape = [[1,1],[2,1],[2,0],[3,0],[3,-1]];
   for (let turn=0;turn<4;turn++) {
-    const g = colourFixture(shape, [[6,6,'L'],[2,2,'J']]);
+    const g = colourRoute(shape, [[6,6,'L'],[2,2,'J']]);
     const ids = g.board.filter(c=>c.type==='L'&&c.x!==6).map(c=>c.id);
     assert.equal(g.checkClear(),true);
     assert.ok(ids.every(id=>g.cleared.some(c=>c.id===id)));
@@ -97,7 +134,7 @@ test('four bent cells, diagonal contacts and entirely external groups do not ext
     [[3,1],[4,1],[4,0],[5,0],[5,-1]]
   ];
   for (const shape of cases) {
-    const g = colourFixture(shape);
+    const g = colourRoute(shape);
     const outline = new Set(g.target.cells.map(c=>`${c.x},${c.y}`));
     const outside = g.board.filter(c=>!outline.has(`${c.x},${c.y}`)).map(c=>c.id);
     assert.equal(g.checkClear(),true);
@@ -108,10 +145,10 @@ test('four bent cells, diagonal contacts and entirely external groups do not ext
 
 
 test('original four-cell straight matches remain valid and connected groups wait for a filled outline', () => {
-  const line = colourFixture([[1,1],[2,1],[3,1],[4,1]]);
+  const line = colourRoute([[1,1],[2,1],[3,1],[4,1]]);
   assert.equal(line.checkClear(),true);
   assert.equal(line.board.length,0);
-  const bent = colourFixture([[1,1],[2,1],[2,0],[3,0],[3,-1]]);
+  const bent = colourRoute([[1,1],[2,1],[2,0],[3,0],[3,-1]]);
   bent.board=bent.board.filter(c=>!(c.x===-1&&c.y===-1));
   const ids=bent.board.map(c=>c.id);
   assert.equal(bent.checkClear(),false);
@@ -136,10 +173,11 @@ test('copy retains original tetromino shapes and movement', () => {
 
 
 test('score gate ignores clear count, rejects below goal, and accepts exact and excess scores', () => {
-  for(const score of [44,45,46]){
+  const goal=make().goal;
+  for(const score of [goal-1,goal,goal+1]){
     const g=make();g.lite.clears=100;g.checkpointScore=score;
-    assert.equal(g.completeCheckpoint(),score>=45);
-    if(score>=45){assert.equal(g.active,null);assert.equal(g.events.at(-1).goal,45);}
+    assert.equal(g.completeCheckpoint(),score>=goal);
+    if(score>=goal){assert.equal(g.active,null);assert.equal(g.events.at(-1).goal,goal);}
   }
   const g=make();g.score=99999;g.checkpointScore=0;
   assert.equal(g.completeCheckpoint(),false);
@@ -148,23 +186,43 @@ test('score gate ignores clear count, rejects below goal, and accepts exact and 
   assert.ok(g.events.some(e=>e.kind==='clear'));assert.equal(g.active,null);
 });
 
-test('post-fourth-stage tuning lowers score pressure and increases the drop budget', () => {
-  const g = make();
+test('authored transition stages keep score pressure and drop budgets gradual', () => {
+  const g = makeRoute();
   g.stage = 3;
-  assert.equal(g.goal, 180);
-  assert.equal(g.dropLimit, 36);
+  assert.equal(g.goal, 120);
+  assert.equal(g.dropLimit, 26);
   g.stage = 4;
-  assert.equal(g.goal, 210);
-  assert.equal(g.dropLimit, 48);
+  assert.equal(g.goal, 140);
+  assert.equal(g.dropLimit, 28);
+  g.stage = 8;
+  assert.equal(g.goal, 240);
+  assert.equal(g.dropLimit, 42);
   g.endless = true;
-  g.stage = 5;
+  g.stage = 9;
   assert.equal(g.goal, Math.round(g.target.goals[0] * 0.875));
-  assert.equal(g.dropLimit, Math.max(54, new original.Game(42).dropLimit));
+  assert.equal(g.dropLimit, Math.max(78, new original.Game(42).dropLimit));
+});
+
+test('authored outline changes invalidate a same-id outline from an older suspended run', () => {
+  const g = make();
+  const current = g.target;
+  // This is the shape of a save produced before the editor changed the
+  // phase: it has the same profile id but no content signature and stale
+  // cells. Reading target must rebuild it from the authored route.
+  g.outline = {
+    stage: 0,
+    growth: 0,
+    liteProfile: ctx.ROTATION_LITE_OUTLINES[0].id,
+    cells: [{x: 6, y: 6}]
+  };
+  assert.equal(g.target.cells.length, current.cells.length);
+  assert.deepEqual(g.target.cells, current.cells);
+  assert.notDeepEqual(g.target.cells, [{x: 6, y: 6}]);
 });
 
 
 test('four actual drops form a twelve-cell colour group and pass using the new score', () => {
-  const g = make();
+  const g = makeRoute();
   const paths = [
     Array(12).fill('down'),
     [...Array(10).fill('down'), 'rotate'],
@@ -255,14 +313,52 @@ test('deadlock waits for a usable swap even with no shovel, then resumes origina
 });
 
 
-test('spread fills the two outermost vacant rings with random colours',()=>{
+test('spread expands exactly one vacant ring around currently placed pattern with random colours',()=>{
  const g=make();g.lite.tools.shovel=1;g.board=[{x:0,y:0,id:g.id++,type:'L'}];
  const before=g.board.length;assert.equal(g.liteUseTool('shovel'),true);
- const added=g.events.at(-1).spreadCells;assert(added.length>8);assert.equal(g.board.length,before+added.length);
+ const added=g.events.at(-1).spreadCells;assert.equal(added.length,8);assert.equal(g.board.length,before+added.length);
  assert(added.every(cell=>['I','J','L','O','S','T','Z'].includes(cell.type)));
  const maxRadius=Math.max(...g.board.map(cell=>Math.max(Math.abs(cell.x),Math.abs(cell.y))));
- assert(maxRadius<=3);assert(g.events.some(event=>event.kind==='compact'));
+ assert.equal(maxRadius,1);assert(!g.events.some(event=>event.kind==='compact'));
+ assert.equal(g.board[0].x,0);assert.equal(g.board[0].y,0);
  assert.equal(g.lite.tools.shovel,0);assert.equal(g.liteUseTool('shovel'),false);
+});
+test('spread expands one ring around currently placed pattern rather than dashed target outline',()=>{
+ const g=make();
+ g.board=[{x:3,y:3,id:g.id++,type:'L'}];
+ g.lite.tools.shovel=1;
+ assert.equal(g.liteUseTool('shovel'),true);
+ const ev=g.events.findLast(e=>e.tool==='shovel');
+ assert(ev&&ev.amount===8);
+ // All added cells should be exactly one ring away from the placed pattern (Chebyshev distance === 1 from (3,3))
+ assert(ev.spreadCells.every(c=>Math.max(Math.abs(c.x-3),Math.abs(c.y-3))===1));
+ // And target outline cells far away should NOT have been filled
+ assert(!g.board.some(c=>c.x===0&&c.y===1));
+});
+test('spread expands exactly 12 cells around a 2x2 placed square',()=>{
+ const g=make();
+ g.board=[
+   {x:3,y:3,id:g.id++,type:'L'},{x:4,y:3,id:g.id++,type:'L'},
+   {x:3,y:4,id:g.id++,type:'L'},{x:4,y:4,id:g.id++,type:'L'}
+ ];
+ g.lite.tools.shovel=1;
+ assert.equal(g.liteUseTool('shovel'),true);
+ const ev=g.events.findLast(e=>e.tool==='shovel');
+ assert.equal(ev.amount,12);
+ assert(ev.spreadCells.every(c=>Math.min(...g.board.slice(0,4).map(b=>Math.max(Math.abs(c.x-b.x),Math.abs(c.y-b.y))))===1));
+});
+test('spread on empty board (开局) adds exactly 8 blocks around the rotor (0, 0)',()=>{
+ const g=make();
+ g.board=[];
+ g.lite.tools.shovel=1;
+ assert.equal(g.liteUseTool('shovel'),true);
+ const ev=g.events.findLast(e=>e.tool==='shovel');
+ assert.equal(ev.amount,8);
+ assert.equal(g.board.length,8);
+ for(const cell of g.board){
+   assert.ok(Math.abs(cell.x)<=1&&Math.abs(cell.y)<=1);
+   assert.ok(!(cell.x===0&&cell.y===0));
+ }
 });
 
 test('swap grants a random special block and sends it to reserve when the three slots are full',()=>{
@@ -327,10 +423,40 @@ test('repair restores one miss allowance, caps at three and cannot be used durin
 
 
 test('ad revive adds ten drops, fills all outline holes and clears through the normal engine once',()=>{
- const g=make();g.lite.tools.supply=2;g.lite.coins=7;g.dropsUsed=g.dropLimit;assert.equal(g.checkDropLimit(),true);
+ const g=make();g.lite.tools.supply=2;g.lite.coins=7;g.dropsUsed=g.dropLimit-1;g.fail('落空');
+ const originalComplete=g.completeCheckpoint;g.completeCheckpoint=()=>false;
  const remaining=g.dropsRemaining,used=g.dropsUsed;assert.equal(g.canRevive,false);assert.equal(g.liteStartReviveAd(100),true);assert.equal(g.liteStartReviveAd(100),false);
  assert.equal(g.liteFinishReviveAd(2099),false);assert.equal(g.liteFinishReviveAd(2100),true);assert.equal(g.dropsRemaining,remaining+10);assert.equal(g.dropsUsed,used);assert.equal(g.phase,'clearing');assert.equal(g.cleared.length,g.target.cells.length);assert.equal(g.events.find(e=>e.kind==='revive').cells.length,g.target.cells.length);
- assert.equal(g.lite.tools.supply,2);assert.equal(g.lite.coins,7);assert.equal(g.lives,3);assert.equal(g.liteFinishReviveAd(2200),false);settle(g);assert.equal(g.phase,'play');assert(g.active);assert.equal(g.dropsRemaining,10);
+ assert.equal(g.lite.tools.supply,2);assert.equal(g.lite.coins,7);assert.equal(g.lives,3);assert.equal(g.liteFinishReviveAd(2200),false);settle(g);assert.equal(g.phase,'play');assert(g.active);assert.equal(g.dropsRemaining,11);g.completeCheckpoint=originalComplete;
+});
+
+test('zero-drop fallback fills the authored outline once and can pass the score gate',()=>{
+ const g=make();g.checkpointScore=g.goal-1;g.dropsUsed=g.dropLimit;
+ const beforeClears=g.lite.clears;
+ assert.equal(g.checkDropLimit(),true);
+ assert.equal(g.phase,'clearing');
+ assert.equal(g.events.at(-1).kind,'lite-zero-drop-clear');
+ const clear=g.events.find(event=>event.kind==='clear');
+ assert.equal(clear.fallback,true);assert.equal(clear.source,'zero-drop');
+ settle(g);
+ assert.equal(g.phase,'checkpoint-complete');assert(g.checkpointScore>=g.goal);
+ assert.equal(g.lite.clears,beforeClears+1);
+ const score=g.checkpointScore,clears=g.lite.clears;
+ assert.equal(g.checkDropLimit(),false);assert.equal(g.checkpointScore,score);assert.equal(g.lite.clears,clears);
+});
+
+test('zero-drop fallback still clears before passing when the score is already at goal',()=>{
+ const g=make();g.checkpointScore=g.goal;g.dropsUsed=g.dropLimit;
+ assert.equal(g.checkDropLimit(),true);assert.equal(g.phase,'clearing');
+ assert.equal(g.lite.clears,1);assert.equal(g.events.some(event=>event.kind==='clear'&&event.fallback),true);
+ settle(g);assert.equal(g.phase,'checkpoint-complete');assert(g.checkpointScore>g.goal);
+});
+
+test('zero-drop fallback still respects a forced failure after its clear',()=>{
+ const g=makeRoute();g.completeCheckpoint=()=>false;g.dropsUsed=g.dropLimit;
+ assert.equal(g.checkDropLimit(),true);assert.equal(g.phase,'clearing');
+ settle(g);
+ assert.equal(g.phase,'lost');assert.equal(g.lite.clears,1);assert.equal(g.checkpointScore,g.goal);
 });
 
 test('revive preserves occupied cells, fills only missing slots and can complete a checkpoint',()=>{
@@ -365,7 +491,7 @@ test('choice refresh allows free once then three timed ads, rejects early/double
  assert.equal(g.liteStartRewardAd(20000),false);assert.equal(g.liteChooseTool(r.toolOptions[0]),true);assert.equal(g.liteRefreshReward(),false);
 });
 test('shop repeats purchases with independent Fibonacci prices, keeps choices and persists prices across stages',()=>{
- const g=make(),r=complete(g);assert.equal(r.shopOffers.length,8);assert.equal(r.shopOffers.filter(o=>o.kind==='tool').length,4);assert.equal(r.shopOffers.filter(o=>o.kind==='special').length,4);assert.equal(new Set(r.shopOffers.map(o=>o.kind+o.item)).size,8);
+ const g=make();g.stage=3;const r=complete(g);assert.equal(r.shopOffers.length,8);assert.equal(r.shopOffers.filter(o=>o.kind==='tool').length,4);assert.equal(r.shopOffers.filter(o=>o.kind==='special').length,4);assert.equal(new Set(r.shopOffers.map(o=>o.kind+o.item)).size,8);
  // SymPy: 5 * fibonacci(n + 2), n = 0..7.
  const prices=[5,10,15,25,40,65,105,170];
  for(const kind of ['tool','special']){
@@ -393,6 +519,24 @@ test('shop batch purchase sums consecutive Fibonacci prices and grants one item 
  const coins=g.lite.coins,owned=g.lite.tools[id];assert.equal(g.liteBuyOffer(offer.slot,2),false);assert.equal(g.lite.coins,coins);assert.equal(g.lite.tools[id],owned);
 });
 
+test('shop purchases can occur across consecutive stages with stage coins and increasing prices',()=>{
+ const g=make();
+ for(let s=0;s<3;s++){
+  assert.equal(g.stage,s);
+  const r=complete(g);
+  assert.equal(g.lite.coins>=5,true);
+  const offer=r.shopOffers.find(o=>o.kind==='tool');
+  const price=g.liteOfferPrice(offer);
+  const id=offer.item;
+  const initialTools=g.lite.tools[id];
+  g.lite.coins=Math.max(g.lite.coins,price);
+  assert.equal(g.liteBuyOffer(offer.slot),true);
+  assert.equal(g.lite.tools[id],initialTools+1);
+  assert.equal(g.liteChooseTool(r.toolOptions[0]),true);
+  assert.equal(g.liteNext(),true);
+ }
+});
+
 test('free rewards and rotor drops do not raise shop prices; old sold stock reopens at its next price',()=>{
  const g=make(),r=complete(g),offer=r.shopOffers[0],id=offer.kind==='special'?'block-'+offer.item:offer.item;
  g.lite.tools[id]+=8;assert.equal(g.liteOfferPrice(offer),5);
@@ -407,17 +551,38 @@ test('clear overflow uses half-up rounding and never pays twice after reload or 
   const h=make();h.phase=g.phase;h.lite=JSON.parse(JSON.stringify(g.lite));assert.equal(h.liteAwardClearCoins(),false);assert.equal(h.lite.coins,16+coins);
  }
 });
-test('stage budgets, inventory and skipping continue every stage and finish the run',()=>{
+test('stage budgets, inventory and skipping continue every authored stage and finish the run',()=>{
  const g=make();g.lite.tools['block-pack']=4;g.lite.tools.repair=3;
- for(const budget of [24,24,24,36,48]){
+ for(const budget of ctx.ROTATION_LITE.dropLimits){
   assert.equal(g.dropLimit,budget);complete(g);assert.equal(g.liteSkipReward(),true);assert.equal(g.lite.tools['block-pack'],4);assert.equal(g.lite.tools.repair,3);
  }
  assert.equal(g.phase,'won');assert.equal(g.liteSkipReward(),false);g.reset();assert.equal(g.lite.tools['block-pack'],0);assert.equal(g.lite.tools.repair,0);
 });
-test('endless retains native varied contours, increasing budgets and continues beyond stage five',()=>{
+test('authored contour route grows through geometric and object silhouettes',()=>{
+ const profiles=route.ROTATION_LITE_OUTLINES;
+ assert.equal(route.ROTATION_LITE.levels,9);assert.equal(profiles.length,9);
+ const expectedNames=['小方环','菱形','横向矩形','十字星','圆角方环','宽翼十字','菱形扩展','圣诞树','小猫头'];
+ const expectedSizes=[8,12,14,20,24,32,36,44,57];
+ assert.deepEqual(Array.from(profiles,p=>p.name),expectedNames);
+ assert.deepEqual(Array.from(profiles,p=>p.cells.length),expectedSizes);
+ assert.equal(profiles.at(-2).style,'object');assert.equal(profiles.at(-1).style,'object');
+ const g=makeRoute();
+ for(const [stage,profile] of profiles.entries()){
+  g.stage=stage;g.outline=null;const target=g.target;
+  assert.equal(target.name,profile.name);assert.equal(target.cells.length,profile.cells.length);
+  const keys=target.cells.map(c=>`${c.x},${c.y}`);
+  assert.equal(new Set(keys).size,keys.length);
+  assert(target.cells.every(c=>Number.isInteger(c.x)&&Number.isInteger(c.y)));
+ }
+});
+test('endless retains native varied contours and continues beyond the authored route',()=>{
  const g=make(),baseline=new original.Game(42);g.endless=baseline.endless=true;baseline.outlineSeed=g.outlineSeed;const shapes=new Set();
  for(let stage=0;stage<12;stage++){
-  g.stage=baseline.stage=stage;g.outline=baseline.outline=null;assert.equal(JSON.stringify(g.target.cells),JSON.stringify(baseline.target.cells));shapes.add(JSON.stringify(g.target.cells));const tuned=stage<3?24:36+(stage-3)*6+(stage>=4?6:0);assert.equal(g.dropLimit,Math.max(tuned,baseline.dropLimit));
+  g.stage=baseline.stage=stage;g.outline=baseline.outline=null;
+  assert.equal(JSON.stringify(g.target.cells),JSON.stringify(baseline.target.cells));
+  shapes.add(JSON.stringify(g.target.cells));
+  const configured=ctx.ROTATION_LITE.dropLimits[stage]??(stage<ctx.ROTATION_LITE.lateDropStart?ctx.ROTATION_LITE.dropLimit:ctx.ROTATION_LITE.lateDropBase+(stage-ctx.ROTATION_LITE.lateDropStart)*ctx.ROTATION_LITE.lateDropStep+(stage>=ctx.ROTATION_LITE.lateScoreStart?ctx.ROTATION_LITE.postFourthDropBonus:0));
+  assert.equal(g.dropLimit,Math.max(configured,baseline.dropLimit));
  }
  assert(shapes.size>5);complete(g);assert.equal(g.liteSkipReward(),true);assert.equal(g.stage,12);assert.equal(g.phase,'play');
 });
@@ -439,7 +604,7 @@ test('column landing dyes every occupied column including far cells but leaves o
  assert(g.board.filter(c=>g.lite.lastPlacementIds.includes(c.id)).every(c=>!c.liteEffect));
 });
 test('blast clears every same-colour cell, adds compound snapshot bonus, and pays coin cells once',()=>{
- const g=make();g.stage=3;g.checkpointScore=100;g.levelScore=100;g.score=500;
+ const g=make();g.stage=8;g.outline=null;g.checkpointScore=100;g.levelScore=100;g.score=500;
  g.board=[{x:4,y:0,id:g.id++,type:'L',liteHeavyBonus:12,liteCoin:true},{x:-1,y:0,id:g.id++,type:'L'},{x:1,y:0,id:g.id++,type:'T'}];
  const event=land(g,'blast');assert.equal(event.removed.length,3);assert(event.removed.every(c=>c.type==='L'));
  assert.equal(event.scoring.points,24);assert.equal(event.scoring.blastBonus,9);assert.equal(event.scoring.coinReward,3);
@@ -453,11 +618,67 @@ test('blast compounds from one snapshot and rounds only once including exact hal
  const expected=make().awardCells([...g.board,{x:0,y:1,type:'L',id:99}],'tool').points;
  const event=land(g,'blast');assert.equal(event.scoring.points,expected+344);assert.equal(g.checkpointScore,1000+expected+344);
 });
-test('trim clears every outside cell while preserving inner cells and their coordinates',()=>{
- const g=make();g.board=[{x:1,y:0,id:g.id++,type:'T'},{x:6,y:6,id:g.id++,type:'S'},{x:-5,y:0,id:g.id++,type:'J'}];
- const event=land(g,'trim');assert.equal(event.removed.length,2);
- assert.deepEqual(Array.from(g.board,c=>[c.x,c.y]),[[1,0],[0,1]]);assert(g.board.every(c=>!c.liteEffect||(id==='patch'&&c.liteCoin)));
- assert(event.scoring.points>0);assert.equal(g.phase,'play');
+test('glass block mirrors landing side blocks to the opposite side and only generated blocks become glass blocks',()=>{
+ const g=make();
+ g.board=[{x:-2,y:1,id:g.id++,type:'T'},{x:-1,y:0,id:g.id++,type:'S'},{x:3,y:3,id:g.id++,type:'J'}];
+ // Land glass block at [-1, 1] (left side)
+ const event=land(g,'glass',[[-1,1]],'L');
+ assert.equal(event.liteEffect,'glass');
+ const rightMap=new Map(g.board.filter(c=>c.x>0).map(c=>[`${c.x},${c.y}`,c]));
+ assert.equal(rightMap.get('2,1')?.type,'T');
+ assert.equal(rightMap.get('1,0')?.type,'S');
+ assert.equal(rightMap.get('1,1')?.type,'L');
+ assert.equal(rightMap.get('3,3')?.type,'J');
+ // 1. Source side (left) does NOT become glass blocks
+ assert(g.board.filter(c=>c.x<0).every(c=>!c.liteGlass));
+ // Only generated/mirrored blocks on right become glass blocks
+ assert.equal(rightMap.get('2,1')?.liteGlass,true);
+ assert.equal(rightMap.get('1,0')?.liteGlass,true);
+ assert.equal(rightMap.get('1,1')?.liteGlass,true);
+ assert.equal(rightMap.get('3,3')?.liteGlass,undefined);
+
+ // 2. Land on right side: mirrors right to left, overwriting conflicting target coordinates
+ const h=make();
+ h.board=[{x:2,y:0,id:h.id++,type:'Z'},{x:-2,y:0,id:h.id++,type:'O'}];
+ land(h,'glass',[[2,1]],'T');
+ const leftCell=h.board.find(c=>c.x===-2&&c.y===0);
+ assert.equal(leftCell?.type,'Z');
+ assert.equal(leftCell?.liteGlass,true);
+ assert.equal(h.board.find(c=>c.x===2&&c.y===0)?.liteGlass,undefined);
+
+ // 3. 4-long bar dropped symmetrically does NOT trigger mirror effect or turn into glass
+ const k=make();
+ k.board=[{x:-3,y:0,id:k.id++,type:'T'}];
+ land(k,'glass',[[0,1],[0,2],[0,3],[0,4]],'I');
+ assert.equal(k.board.filter(c=>c.x===3).length,0);
+ assert(k.board.every(c=>!c.liteGlass));
+});
+test('generated glass blocks are immune to color effects such as blast, column dye and diamond marking',()=>{
+ const g=make();
+ g.board=[
+   {x:1,y:1,id:g.id++,type:'L',liteGlass:true},
+   {x:1,y:2,id:g.id++,type:'T',liteGlass:true},
+   {x:2,y:1,id:g.id++,type:'L'},
+   {x:3,y:1,id:g.id++,type:'T'}
+ ];
+ // Blast block of type 'L': clears regular 'L' at (2,1) and itself, but NOT glass 'L' at (1,1)
+ piece(g,[[0,5]],'blast','L');
+ g.resolvePendingSpecial();
+ assert(g.board.some(c=>c.x===1&&c.y===1&&c.liteGlass&&c.type==='L'));
+ assert(!g.board.some(c=>c.x===2&&c.y===1));
+
+ // Column block of type 'S' dropped in column 1:
+ // Glass cells in column 1 do NOT get dyed
+ piece(g,[[1,5]],'column','S');
+ g.resolvePendingSpecial();
+ const glassCell=g.board.find(c=>c.x===1&&c.y===2);
+ assert.equal(glassCell?.type,'T'); // Still 'T', not dyed to 'S'
+
+ // Diamond block of type 'T':
+ // Glass cells in board do NOT get diamond mark
+ piece(g,[[3,5]],'diamond','T');
+ g.resolvePendingSpecial();
+ assert.equal(glassCell?.liteDiamond,undefined);
 });
 test('coin block stays where it lands and pays each coin cell for the whole clear batch once',()=>{
  const g=make();g.board=[{x:1,y:0,id:g.id++,type:'T'},{x:2,y:0,id:g.id++,type:'S'}];
@@ -466,9 +687,9 @@ test('coin block stays where it lands and pays each coin cell for the whole clea
  const score=g.awardCells(g.board,'outline');assert.equal(score.coinReward,8);assert.equal(g.lite.coins,8);
  g.awardCells(g.board,'outline');assert.equal(g.lite.coins,8);
 });
-test('coin reward covers trim and excludes shovel or pack consumption',()=>{
- const g=make();g.board=[{x:5,y:0,type:'L',id:g.id++,liteCoin:true},{x:6,y:0,type:'T',id:g.id++}];
- const event=land(g,'trim');assert.equal(event.scoring.coinReward,2);assert.equal(g.lite.coins,2);
+test('coin reward covers blast and excludes shovel or pack consumption',()=>{
+ const g=make();g.board=[{x:5,y:0,type:'L',id:g.id++,liteCoin:true},{x:6,y:0,type:'L',id:g.id++}];
+ const event=land(g,'blast');assert.equal(event.scoring.coinReward,3);assert.equal(g.lite.coins,3);
  const h=make();piece(h,[[3,1]],'patch');h.resolvePendingSpecial();assert.equal(h.liteUseTool('shovel'),true);assert.equal(h.lite.coins,0);
  const k=make();const cells=piece(k,[[0,1]],'pack');cells[0].liteCoin=true;k.resolvePendingSpecial();assert.equal(k.lite.coins,0);
 });
@@ -490,7 +711,7 @@ test('heavy score weights base and each own colour bonus without boosting other 
  const g=make(),cells=[...Array.from({length:4},(_,x)=>({x,y:1,type:'L',id:x+1,liteHeavyBonus:12})),...Array.from({length:4},(_,x)=>({x,y:3,type:'T',id:x+5}))];
  const result=g.awardCells(cells,'outline');assert.equal(result.points,112);assert.equal(result.heavyCellCount,4);assert.equal(result.heavyMaxMultiplier,13);
  const mixed=Array.from({length:5},(_,x)=>({x,y:1,type:'L',id:x+1,liteHeavyBonus:x<2?12:0}));assert.equal(make().awardCells(mixed,'outline').points,75);
- const trim=make();trim.board=[{x:5,y:0,id:trim.id++,type:'L',liteHeavyBonus:12},{x:6,y:0,id:trim.id++,type:'T'}];assert.equal(land(trim,'trim').scoring.points,14);
+ const blast=make();blast.board=[{x:5,y:0,id:blast.id++,type:'L',liteHeavyBonus:12},{x:6,y:0,id:blast.id++,type:'T'}];assert.equal(land(blast,'blast').scoring.points,14);
 });
 test('diamond marks every same-colour cell at landing and triples marked score on clear',()=>{
  const g=make();
@@ -506,6 +727,18 @@ test('heavy drops each cell independently without losing a life, then starts the
  assert.equal(g.lives,3);assert.equal(g.dropsUsed,1);assert.equal(g.phase,'rotating');
  assert.equal(g.events.filter(e=>e.heavyDrop).length,2);assert.equal(g.events.filter(e=>e.kind==='turn').length,1);
 });
+test('heavy block compresses blocks underneath it towards bottom-center',()=>{
+ const g=make();
+ g.board=[{x:2,y:2,id:g.id++,type:'L'}];
+ g.active={type:'I',shape:[[0,0]],x:2,y:5,liteEffect:'heavy',color:'I'};
+ g.liteLockHeavy();
+ const movedCell=g.board.find(c=>c.id===1);
+ assert(movedCell);
+ // Prior to rotation, cell moved to (0, -1); rotated 90 deg CCW with torque lever 2 gives (-1, 0)
+ assert.equal(movedCell.x,-1);
+ assert.equal(movedCell.y || 0,0);
+ assert(g.events.some(e=>e.kind==='compact'));
+});
 test('heavy and coin metadata follow rotations, repacks, dye and save reload; old extra turns are discarded',()=>{
  const g=make();g.board=[{x:1,y:0,id:g.id++,type:'L',liteHeavyBonus:12,liteCoin:true,liteEffect:'patch'},{x:-1,y:0,id:g.id++,type:'T'}];const id=g.board[0].id;
  g.beginRotation({dir:1,lever:-1});g.finishRotation();g.settleRemaining(true);const moved=g.board.find(c=>c.id===id);assert.equal(moved.liteHeavyBonus,12);assert.equal(moved.liteCoin,true);
@@ -513,9 +746,9 @@ test('heavy and coin metadata follow rotations, repacks, dye and save reload; ol
  const h=make();h.board=JSON.parse(JSON.stringify(g.board));h.lite=JSON.parse(JSON.stringify(g.lite));h.lite.heavyTurns={remaining:2,dir:1};h.liteEnsureExpansion();assert.equal(h.lite.heavyTurns,undefined);assert.equal(h.board.find(c=>c.id===id).liteHeavyBonus,12);assert.equal(h.board.find(c=>c.id===id).liteCoin,true);
 });
 test('supply grants rounded ten percent of current total limit, including previous grants',()=>{
- // SymPy half-up: 24/10 ->2;26/10 ->3;36/10 ->4;25/10 ->3.
+ // SymPy half-up: 24/10 ->2;26/10 ->3;37/10 ->4;25/10 ->3.
  const g=make();g.liteGrantTool('supply',2);g.dropsUsed=20;assert.equal(g.liteUseTool('supply'),true);assert.equal(g.dropLimit,26);assert.equal(g.events.at(-1).amount,2);assert.equal(g.liteUseTool('supply'),true);assert.equal(g.dropLimit,29);assert.equal(g.events.at(-1).amount,3);
- const h=make();h.stage=3;h.liteGrantTool('supply');assert.equal(h.dropLimit,36);h.liteUseTool('supply');assert.equal(h.dropLimit,40);assert.equal(h.events.at(-1).amount,4);
+ const h=make();h.stage=7;h.liteGrantTool('supply');const initLimit=h.dropLimit,inc=Math.floor((initLimit+5)/10);assert.equal(h.liteUseTool('supply'),true);assert.equal(h.dropLimit,initLimit+inc);assert.equal(h.events.at(-1).amount,inc);
  const half=make();half.lite.extraDrops=1;half.liteGrantTool('supply');half.liteUseTool('supply');assert.equal(half.dropLimit,28);
 });
 test('all six tools transform a real falling piece, consume inventory, trigger once on landing and settle',()=>{
@@ -547,3 +780,264 @@ test('claimed supply waits for continue, blocks reclaims but permits shop purcha
  assert.equal(h.lite.roll.chosenTool,id);assert.equal(h.lite.roll.settled,true);assert.equal(h.liteChooseTool(id),false);
  assert.equal(h.liteNext(),true);assert.equal(h.stage,stage+1);assert.equal(h.liteNext(),false);
 });
+
+test('clearing an outline moves the level on to its next outline and keeps the run',()=>{
+ const g=makePhase();
+ assert.equal(phaseContext.ROTATION_LITE.levels,2);
+ // 分数与投放次数属于整关：第二个阶段自己填的 9999 / 1 不参与，取第一个阶段的值
+ assert.deepEqual(Array.from(phaseContext.ROTATION_LITE.dropLimits),[10,8]);
+ assert.equal(g.stage,0);assert.equal(g.goal,4000);assert.equal(g.dropLimit,10);
+ assert.equal(g.target.cells.length,8);assert.equal(g.target.phaseIndex,0);assert.equal(g.target.phaseCount,2);
+ fillOutline(g);g.dropsUsed=3;
+ assert.equal(g.checkClear(),true);assert.equal(g.phase,'clearing');
+ settle(g);
+ assert.equal(g.stage,0);assert.equal(g.lite.phaseIndex,1);
+ assert.equal(g.target.name,'大轮廓');assert.equal(g.target.cells.length,24);
+ assert.equal(g.dropsUsed,3);
+ assert(g.checkpointScore>0);
+ assert.equal(g.lite.clears,1);
+ assert.equal(g.events.filter(e=>e.kind==='lite-phase').length,1);
+});
+
+test('reaching the level goal settles instead of switching outlines',()=>{
+ const g=makePhase();
+ fillOutline(g);g.checkpointScore=g.goal-1;
+ assert.equal(g.checkClear(),true);
+ settle(g);
+ assert.equal(g.lite.phaseIndex,0);
+ assert.equal(g.target.cells.length,8);
+ assert.equal(g.phase,'checkpoint-complete');
+ assert.equal(g.events.some(e=>e.kind==='lite-phase'),false);
+});
+
+test('the last outline stays put and a spent drop budget never switches',()=>{
+ const g=makePhase();
+ fillOutline(g);assert.equal(g.checkClear(),true);settle(g);
+ assert.equal(g.lite.phaseIndex,1);
+ fillOutline(g);assert.equal(g.checkClear(),true);settle(g);
+ assert.equal(g.phase,'play');assert.equal(g.lite.phaseIndex,1);assert.equal(g.target.cells.length,24);
+ const h=makePhase();
+ fillOutline(h);h.dropsUsed=h.dropLimit;
+ assert.equal(h.checkClear(),true);settle(h);
+ assert.equal(h.lite.phaseIndex,0);assert.equal(h.target.cells.length,8);
+});
+
+test('a resumed run comes back to the outline it was left on',()=>{
+ const g=makePhase();
+ fillOutline(g);g.checkClear();settle(g);
+ assert.equal(g.lite.phaseIndex,1);
+ const saved=JSON.parse(JSON.stringify(g));
+ const h=makePhase();
+ Object.assign(h,saved);h.liteEnsureExpansion();
+ assert.equal(h.target.name,'大轮廓');assert.equal(h.target.cells.length,24);
+});
+
+test('tools and special blocks unlock progressively across stages in shop, drops, swap and rewards',()=>{
+ // Stage 0 (第1关): only T1 (shovel, swap, block-patch, block-column)
+ const g0=make();assert.equal(g0.stage,0);
+ const unlocked0=g0.liteUnlockedTools();
+ assert.deepEqual(Array.from(unlocked0.map(t=>t.id)).sort(),['block-column','block-patch','shovel','swap'].sort());
+ const r0=complete(g0);
+ assert.equal(r0.shopOffers.length,4);
+ assert.equal(r0.shopOffers.filter(o=>o.kind==='tool').length,2);
+ assert.equal(r0.shopOffers.filter(o=>o.kind==='special').length,2);
+ assert.equal(r0.toolOptions.length,3);
+ assert(r0.toolOptions.every(id=>unlocked0.some(t=>t.id===id)));
+ for(let i=0;i<10;i++){
+  g0.lite.tools.swap=1;g0.phase='play';g0.active={type:'T',color:'T'};
+  g0.liteUseTool('swap');
+  assert(g0.lite.tools['block-patch']>0||g0.lite.tools['block-column']>0);
+  assert.equal(g0.lite.tools['block-glass']||0,0);
+  assert.equal(g0.lite.tools['block-blast']||0,0);
+ }
+
+ // Stage 1 (第2关): T1 + T2 (+supply, block-glass, block-heavy) -> 7 items
+ const g1=make();g1.stage=1;
+ const unlocked1=g1.liteUnlockedTools();
+ assert.equal(unlocked1.length,7);
+ const r1=complete(g1);
+ assert.equal(r1.shopOffers.length,7);
+ assert.equal(r1.shopOffers.filter(o=>o.kind==='tool').length,3);
+ assert.equal(r1.shopOffers.filter(o=>o.kind==='special').length,4);
+ assert(r1.toolOptions.every(id=>unlocked1.some(t=>t.id===id)));
+
+ // Stage 2 (第3关): +repair, block-pack -> 9 items (shop offers 8)
+ const g2=make();g2.stage=2;
+ const unlocked2=g2.liteUnlockedTools();
+ assert.equal(unlocked2.length,9);
+ const r2=complete(g2);
+ assert.equal(r2.shopOffers.length,8);
+ assert.equal(r2.shopOffers.filter(o=>o.kind==='tool').length,4);
+ assert.equal(r2.shopOffers.filter(o=>o.kind==='special').length,4);
+
+ // Stage 3+ (第4关及以后): all 12 items
+ const g3=make();g3.stage=3;
+ assert.equal(g3.liteUnlockedTools().length,12);
+ const r3=complete(g3);
+ assert.equal(r3.shopOffers.length,8);
+});
+
+test('unseen shop tools track unlocks, trigger badge, and persist once seen',()=>{
+ // Stage 0: default 4 items are already seen, no unseen tools
+ const g=make();
+ assert.equal(g.stage,0);
+ assert.deepEqual(Array.from(g.lite.seenShopTools).sort(),['block-column','block-patch','shovel','swap'].sort());
+ assert.equal(g.liteUnseenShopTools().length,0);
+
+ // Advance to Stage 1: supply, block-glass, block-heavy are unlocked and unseen
+ g.stage=1;
+ const unseen1=g.liteUnseenShopTools();
+ assert.equal(unseen1.length,3);
+ assert.deepEqual(Array.from(unseen1.map(t=>t.id)).sort(),['block-heavy','block-glass','supply'].sort());
+
+ // Mark unseen as seen
+ const marked1=g.liteMarkShopToolsSeen(unseen1.map(t=>t.id));
+ assert.equal(marked1.length,3);
+ assert.equal(g.liteUnseenShopTools().length,0);
+
+ // Advance to Stage 2: repair, block-pack unlocked and unseen
+ g.stage=2;
+ const unseen2=g.liteUnseenShopTools();
+ assert.equal(unseen2.length,2);
+ assert.deepEqual(Array.from(unseen2.map(t=>t.id)).sort(),['block-pack','repair'].sort());
+
+ // Save and restore preserves seenShopTools
+ const saved=JSON.parse(JSON.stringify(g));
+ const restored=make();
+ Object.assign(restored,saved);
+ restored.liteEnsureExpansion();
+ assert.equal(restored.liteUnseenShopTools().length,2);
+ restored.liteMarkShopToolsSeen();
+ assert.equal(restored.liteUnseenShopTools().length,0);
+
+ // Advance to Stage 3: dye, block-blast, block-diamond unlocked and unseen
+ restored.stage=3;
+ const unseen3=restored.liteUnseenShopTools();
+ assert.equal(unseen3.length,3);
+ assert.deepEqual(Array.from(unseen3.map(t=>t.id)).sort(),['block-blast','block-diamond','dye'].sort());
+ restored.liteMarkShopToolsSeen();
+ assert.equal(restored.liteUnseenShopTools().length,0);
+
+ // Advance to Stage 4+: no more tools to unlock
+ restored.stage=4;
+ assert.equal(restored.liteUnseenShopTools().length,0);
+});
+
+test('liteBlockFx creates glassMesh with procedural glass material and updates instances without dark backing',()=>{
+  const code=fs.readFileSync(new URL('../lite-blocks.js',import.meta.url),'utf8');
+  const addedMeshes=[];
+  const mockScene={add:(m)=>addedMeshes.push(m)};
+  class MockMatrix4 {
+    makeRotationZ(a){this.a=a;return this;}
+    scale(s){this.s={...s};return this;}
+    setPosition(x,y,z){this.pos={x,y,z};return this;}
+  }
+  class MockVector3 {
+    set(x,y,z){this.x=x;this.y=y;this.z=z;return this;}
+  }
+  class MockColor {
+    setHex(hex){this.hex=hex;return this;}
+  }
+  class MockInstancedMesh {
+    constructor(geo,mat,count){this.geo=geo;this.mat=mat;this.capacity=count;this.count=0;this.matrices=[];this.colors=[];this.instanceMatrix={};this.instanceColor={};}
+    setMatrixAt(i,m){this.matrices[i]={...m};}
+    setColorAt(i,c){this.colors[i]={...c};}
+  }
+  class MockShaderMaterial {
+    constructor(cfg){this.cfg=cfg;}
+  }
+  class MockStandardMaterial {
+    constructor(cfg){this.cfg=cfg;}
+  }
+  class MockBoxGeometry {}
+  class MockTexture {}
+  const mockTHREE = {
+    Matrix4: MockMatrix4,
+    Vector3: MockVector3,
+    Color: MockColor,
+    InstancedMesh: MockInstancedMesh,
+    ShaderMaterial: MockShaderMaterial,
+    MeshStandardMaterial: MockStandardMaterial,
+    BoxGeometry: MockBoxGeometry,
+    Texture: MockTexture,
+    palette: { T: 0xac49ff, S: 0x8bf339 }
+  };
+  const c = vm.createContext({
+    globalThis: {},
+    ROTATION_LITE: ctx.ROTATION_LITE,
+    Image: class { set src(v){} },
+    console
+  });
+  c.globalThis = c;
+  vm.runInContext(code, c);
+  const fx = c.createLiteBlockEffects(mockScene, mockTHREE, 100, ()=>{});
+  assert(addedMeshes.length > 0);
+  const glassMesh = addedMeshes[addedMeshes.length - 1];
+  assert(glassMesh.mat instanceof MockShaderMaterial);
+  assert.equal(glassMesh.mat.cfg.transparent, true);
+  assert.equal(glassMesh.mat.cfg.depthWrite, true);
+
+  // Add a glass cell
+  fx.begin();
+  fx.add({ x: -1, y: 1, type: 'T', liteGlass: true }, -1, 1, 0, 1, 0);
+  fx.finish();
+  assert.equal(glassMesh.count, 1);
+  assert.equal(glassMesh.colors[0].hex, 0xac49ff);
+  assert.deepEqual(glassMesh.matrices[0].pos, { x: -1, y: 1, z: 0 });
+});
+
+test('liteBlockFx and special layers support coin blocks with polygonOffset and transparency', () => {
+  const code = fs.readFileSync(new URL('../lite-blocks.js', import.meta.url), 'utf8');
+  const addedMeshes = [];
+  class MockBoxGeometry {}
+  class MockTexture { constructor(img){ this.img = img; } }
+  class MockStandardMaterial { constructor(cfg){ this.cfg = cfg; } }
+  class MockShaderMaterial { constructor(cfg){ this.cfg = cfg; } }
+  class MockInstancedMesh {
+    constructor(geo, mat, cap){
+      this.geo = geo; this.mat = mat; this.material = mat; this.cap = cap; this.count = 0;
+      this.instanceMatrix = { needsUpdate: false };
+      this.instanceColor = { needsUpdate: false };
+      this.matrices = [];
+      this.colors = [];
+    }
+    setMatrixAt(idx, mat){ this.matrices[idx] = mat; }
+    setColorAt(idx, col){ this.colors[idx] = col; }
+  }
+  const mockScene = { add(m){ addedMeshes.push(m); } };
+  const mockTHREE = {
+    BoxGeometry: MockBoxGeometry,
+    InstancedMesh: MockInstancedMesh,
+    MeshStandardMaterial: MockStandardMaterial,
+    ShaderMaterial: MockShaderMaterial,
+    Texture: MockTexture,
+    Matrix4: class {
+      makeRotationZ(a){ this.rot = a; return this; }
+      scale(s){ this.s = s; return this; }
+      setPosition(x,y,z){ this.pos = {x,y,z}; return this; }
+    },
+    Vector3: class { set(x,y,z){ this.x=x;this.y=y;this.z=z; return this; } },
+    Color: class { setHex(h){ this.hex=h; return this; } }
+  };
+  const c = vm.createContext({
+    globalThis: {},
+    ROTATION_LITE: ctx.ROTATION_LITE,
+    Image: class { set src(v){ this.srcVal = v; } get src(){ return this.srcVal; } },
+    console
+  });
+  c.globalThis = c;
+  vm.runInContext(code, c);
+  const fx = c.createLiteBlockEffects(mockScene, mockTHREE, 100, ()=>{});
+  const specialMesh = addedMeshes.find(m => m.mat instanceof MockStandardMaterial);
+  assert(specialMesh, 'StandardMaterial special mesh must exist');
+  assert.equal(specialMesh.mat.cfg.polygonOffset, true);
+  assert.equal(specialMesh.mat.cfg.transparent, true);
+
+  fx.begin();
+  fx.add({ x: 2, y: 1, type: 'L', liteEffect: 'patch', liteCoin: true }, 2, 1, 0, 1, 0);
+  fx.finish();
+  const snapshot = fx.snapshot();
+  assert.equal(snapshot.patch.count, 1);
+});
+
+

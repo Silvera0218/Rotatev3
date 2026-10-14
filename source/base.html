@@ -8908,11 +8908,11 @@ clear(e,t){this.impact(e,t),this.collectClear(e,t)}impact(e,t){this.stats.clears
    mix(mix(hash3(i+vec3(0,0,1)),hash3(i+vec3(1,0,1)),f.x),mix(hash3(i+vec3(0,1,1)),hash3(i+vec3(1,1,1)),f.x),f.y),f.z);
  }
  void main(){
-  // \u5728\u5C4F\u5E55\u50CF\u7D20\u683C\u4E0A\u91C7\u6837\u65B9\u5411\uFF0C\u56DB\u9762\u5171\u7528\u7403\u9762\u661F\u56FE\uFF0C\u8FB9\u89D2\u548C\u7ECF\u5EA6\u63A5\u7F1D\u8FDE\u7EED\u3002
+  // 在屏幕像素格上采样方向，四面共用球面星图，边角和经度接缝连续。
   // The render target already contains one fragment per pixel cell (uPixel=1).
   vec3 d=normalize(vSkyDirection);
   float fieldFade=smoothstep(.08,.55,length((gl_FragCoord.xy/uResolution-uCenter)*vec2(1.0,.8)))*.55+.45;
-  // \u8FDE\u7EED\u4E09\u7EF4\u6D41\u573A\u8DE8\u56DB\u9762\u5171\u7528\u3002\u968F\u673A\u79CD\u5B50\u4EC5\u521D\u59CB\u5316\u4E00\u6B21\uFF0C\u907F\u514D\u661F\u4E91\u8DF3\u53D8\u3002
+  // 连续三维流场跨四面共用。随机种子仅初始化一次，避免星云跳变。
   float t=uTime*.055;
   vec3 flow=d*3.8+vec3(uSeed)+sin(d.yzx*5.0+vec3(t,-t*.7,t*.5))*.24;
   float cloud=noise3(flow)*.68+noise3(flow*2.7+13.0)*.32;
@@ -8921,14 +8921,13 @@ clear(e,t){this.impact(e,t),this.collectClear(e,t)}impact(e,t){this.stats.clears
   vec3 nebula=mix(uCloud,uBlue,smoothstep(.18,.88,pigment));
   nebula=mix(nebula,vec3(.4,.72,.26),smoothstep(.67,.87,cloud)*.16);
   float filament=pow(.5+.5*sin(cloud*29.0+d.y*5.0-t),6.0)*mist;
-  // \u53C2\u8003\u56FE\u7684\u4EAE\u94B4\u84DD\u5230\u6E56\u9752\u8272\uFF0C\u6E10\u53D8\u968F\u5929\u7A7A\u65B9\u5411\u8FDE\u7EED\uFF0C\u56DB\u9762\u4E0D\u4F1A\u51FA\u73B0\u8272\u5757\u63A5\u7F1D\u3002
+  // 参考图的亮钴蓝到湖青色，渐变随天空方向连续，四面不会出现色块接缝。
   vec3 color=mix(uBlue,uBase,smoothstep(-.65,.55,d.y));
   color=mix(color,uBase,(1.0-fieldFade)*.26);
   color=mix(color,nebula,(mist*.28+filament*.12)*fieldFade);
   gl_FragColor=vec4(color,1.0);
   #include <colorspace_fragment>
- }
-`;function bf(){let n=[],e=[],t=[],i=[],s=h=>h-Math.floor(h),r=(h,d)=>{let u=s(h*.1031),m=s(d*.103),p=s(h*.0973),v=u*(m+33.33)+m*(u+33.33)+p*(p+33.33);return u+=v,m+=v,p+=v,s((u+m)*p)};for(let h=0;h<128;h++)for(let d=0;d<256;d++){let u=r(d,h);if(u<.91)continue;let m=r(d+83,h+83),p=(d+.5)/256*Math.PI*2-Math.PI,v=(h+.5)/128*Math.PI-Math.PI/2;n.push(Math.sin(p)*Math.cos(v)*5,Math.sin(v)*5,-Math.cos(p)*Math.cos(v)*5);let f=m>=.88?.3:.15,g=20*Math.PI/256*f;e.push(g*Math.cos(v),g),t.push(u*71,.65+r(d+41,h+41)*.8),i.push(m)}let a=new Pe(1,1),o=new I3;o.index=a.index,o.setAttribute("position",a.getAttribute("position")),o.setAttribute("starCenter",new je(new Float32Array(n),3)),o.setAttribute("starSize",new je(new Float32Array(e),2)),o.setAttribute("starPhase",new je(new Float32Array(t),2)),o.setAttribute("starKind",new je(new Float32Array(i),1)),o.instanceCount=i.length;let c=new we({transparent:!0,depthTest:!1,depthWrite:!1,toneMapped:!1,uniforms:{uTime:{value:0},uResolution:{value:new m0},uCenter:{value:new m0}},vertexShader:`attribute vec3 starCenter;attribute vec2 starSize;attribute vec2 starPhase;attribute float starKind;
+ }`;function bf(){let n=[],e=[],t=[],i=[],s=h=>h-Math.floor(h),r=(h,d)=>{let u=s(h*.1031),m=s(d*.103),p=s(h*.0973),v=u*(m+33.33)+m*(u+33.33)+p*(p+33.33);return u+=v,m+=v,p+=v,s((u+m)*p)};for(let h=0;h<128;h++)for(let d=0;d<256;d++){let u=r(d,h);if(u<.91)continue;let m=r(d+83,h+83),p=(d+.5)/256*Math.PI*2-Math.PI,v=(h+.5)/128*Math.PI-Math.PI/2;n.push(Math.sin(p)*Math.cos(v)*5,Math.sin(v)*5,-Math.cos(p)*Math.cos(v)*5);let f=m>=.88?.3:.15,g=20*Math.PI/256*f;e.push(g*Math.cos(v),g),t.push(u*71,.65+r(d+41,h+41)*.8),i.push(m)}let a=new Pe(1,1),o=new I3;o.index=a.index,o.setAttribute("position",a.getAttribute("position")),o.setAttribute("starCenter",new je(new Float32Array(n),3)),o.setAttribute("starSize",new je(new Float32Array(e),2)),o.setAttribute("starPhase",new je(new Float32Array(t),2)),o.setAttribute("starKind",new je(new Float32Array(i),1)),o.instanceCount=i.length;let c=new we({transparent:!0,depthTest:!1,depthWrite:!1,toneMapped:!1,uniforms:{uTime:{value:0},uResolution:{value:new m0},uCenter:{value:new m0}},vertexShader:`attribute vec3 starCenter;attribute vec2 starSize;attribute vec2 starPhase;attribute float starKind;
    uniform float uTime;varying vec3 vTint;varying float vAlpha;
    void main(){vec4 p=modelViewMatrix*vec4(starCenter,1.0);p.xy+=position.xy*starSize;
     gl_Position=projectionMatrix*p;

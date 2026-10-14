@@ -3,32 +3,168 @@
   'use strict';
   const BUFFS = [];
   const SPECIALS = [
-    {id:'column',name:'变色方块',description:'落地后，将自身所在的整列染成同色'},
-    {id:'blast',name:'爆炸方块',description:'清除全部同色格，每格使本关分数增长3%',detail:'落地后清除全部同色格（含自身），正常计分。额外加分按触发前本关得分×（1.03的消除格数次方−1）计算，整批计算后四舍五入。'},
-    {id:'trim',name:'修枝方块',description:'落地后，消除虚线区域外的所有方块'},
-    {id:'patch',name:'金币方块',description:'消除时，按本次消除格数获得金币',detail:'落地后保留金币标记。消除时，每个金币格获得等同于本批消除格数的金币；多个金币格分别触发。铲除或重排消耗不发金币。'},
-    {id:'pack',name:'强迫症方块',description:'落地后，消耗自身将其余方块向内重排'},
-    {id:'heavy',name:'超重方块',description:'落地后，各格分别下落到底',detail:'落地后，方块的每一格分别下落到无法继续下落的位置；落空不扣生命。结算下落后再旋转转轴。'},
-    {id:'diamond',name:'钻石方块',description:'同色标记格消除时分数×3',detail:'落地时标记棋盘上全部同色方块；这些格子消除时按基础分的3倍结算。标记会跟随方块移动、旋转和重排。'}
+    {id:'column',unlockStage:0,name:'变色方块',description:'落地后，将自身所在的整列染成同色'},
+    {id:'patch',unlockStage:0,name:'金币方块',description:'消除时，按本次消除格数获得金币',detail:'落地后保留金币标记。消除时，每个金币格获得等同于本批消除格数的金币；多个金币格分别触发。铲除或重排消耗不发金币。'},
+    {id:'glass',unlockStage:1,name:'玻璃方块',description:'落地后将一侧方块镜像至另一侧，生成方块变为玻璃方块',detail:'落地后，若位于转轴左侧，将左侧所有方块对称镜像至右侧（覆盖对应格，保留其余格）；若位于右侧则镜像至左侧。镜像生成方块转化为半透明玻璃方块（原侧方块不变），保留原色并可正常参与消除，且不受以方块颜色为条件的效果影响。4长条形方块若在中心对称掉落，则不触发镜像。'},
+    {id:'heavy',unlockStage:1,name:'超重方块',description:'落地后下落到底并压紧下方方块',detail:'落地后，尽可能把其下方的方块向底部-中心压紧，方块各格分别下落到无法继续下落的位置；落空不扣生命。结算下落后再旋转转轴。'},
+    {id:'pack',unlockStage:2,name:'强迫症方块',description:'落地后，消耗自身将其余方块向内重排'},
+    {id:'blast',unlockStage:3,name:'爆炸方块',description:'清除全部同色格，每格使本关分数增长3%',detail:'落地后清除全部同色格（含自身），正常计分。额外加分按触发前本关得分×（1.03的消除格数次方−1）计算，整批计算后四舍五入。'},
+    {id:'diamond',unlockStage:3,name:'钻石方块',description:'同色标记格消除时分数×3',detail:'落地时标记棋盘上全部同色方块；这些格子消除时按基础分的3倍结算。标记会跟随方块移动、旋转和重排。'}
   ];
-  const RULES = Object.freeze({
-    levels: 5, scoreGoals: [45,80,120,180,210],
+  const BASE_RULES = Object.freeze({
+    // The original engine has ten procedural stages, but the lightweight
+    // rules intentionally use a shorter, authored route.  Nine authored
+    // stages keep the first three familiar and add five readable bridges
+    // before the cat silhouette becomes the finale.
+    // Monte Carlo tuning (moderate no-tool baseline, 30 samples per stage)
+    // lowered the pressure while preserving a clear upward curve.
+    levels: 9, scoreGoals: [40,65,90,120,140,165,190,215,240],
+    dropLimits: [24,24,24,26,28,30,33,37,42],
     dropLimit: 24, lateDropStart: 3, lateDropBase: 36, lateDropStep: 6, postFourthDropBonus: 6,
     lateScoreStart: 4, lateScoreFactor: 0.875, rotorDropChance: 0.06,
     colorScoring: Object.freeze({version:'lite-connected-fibonacci-v1',lineMinimum:4,connectedMinimum:5,firstBonus:4,secondBonus:8,recurrenceEnd:10}),
     coinReward: 5, clearCoins: 5, toolPrice:5, shopSlots:8, buffs: BUFFS,
     tools: [
-      { id: 'shovel', name: '蔓延', description: '用随机颜色填补最外围两圈空缺。', detail:'优先填补当前最外围一圈，再向外扩一圈；每格颜色随机。' },
-      { id: 'swap', name: '换块', description: '获得一个随机特殊方块。', detail:'优先填入装备槽；装备槽已满时进入暂存背包。' },
-      { id: 'supply', name: '补给箱', description: '增加本关总投放次数的10%', detail:'按使用时本关总投放次数的10%增加投放机会，四舍五入；总次数包含此前已增加的次数。' },
-      { id: 'dye', name: '调色瓶', description: '将当前落块染成棋盘上最多的颜色。' },
-      { id: 'repair', name: '生命之心', description: '恢复 1 次落空容错，最多 3 次。' },
-      ...SPECIALS.map(block=>({id:'block-'+block.id,name:block.name,blockEffect:block.id,description:block.description,detail:block.detail}))
+      { id: 'shovel', unlockStage: 0, name: '蔓延', description: '沿当前已摆好的样式向外扩圈。', detail:'在当前已摆好的样式上，检测边界一圈，再加上新的一圈；每格颜色随机。' },
+      { id: 'swap', unlockStage: 0, name: '换块', description: '获得一个随机特殊方块。', detail:'优先填入装备槽；装备槽已满时进入暂存背包。' },
+      { id: 'supply', unlockStage: 1, name: '补给箱', description: '增加本关总投放次数的10%', detail:'按使用时本关总投放次数的10%增加投放机会，四舍五入；总次数包含此前已增加的次数。' },
+      { id: 'repair', unlockStage: 2, name: '生命之心', description: '恢复 1 次落空容错，最多 3 次。' },
+      { id: 'dye', unlockStage: 3, name: '调色瓶', description: '将当前落块染成棋盘上最多的颜色。' },
+      ...SPECIALS.map(block=>({id:'block-'+block.id,unlockStage:block.unlockStage??0,name:block.name,blockEffect:block.id,description:block.description,detail:block.detail}))
     ],
     specials: SPECIALS,
     rewardRoutes: [{id:'tool',name:'道具补给'}]
   });
+  const maskCells = rows => {
+    const width = Math.max(...rows.map(row => row.length));
+    const left = Math.floor(width / 2);
+    const top = Math.floor(rows.length / 2);
+    const cells = [];
+    rows.forEach((row, rowIndex) => {
+      for (let column = 0; column < row.length; column++) {
+        if (row[column] !== '#') continue;
+        const x = column - left;
+        const y = top - rowIndex;
+        // The rotor occupies the centre cell.  Every authored outline leaves
+        // it open, matching the original geometry and keeping rotations fair.
+        if (x === 0 && y === 0) continue;
+        cells.push({ x, y });
+      }
+    });
+    return cells;
+  };
+  const predicateCells = predicate => {
+    const cells = [];
+    for (let y = -5; y <= 5; y++) {
+      for (let x = -5; x <= 5; x++) {
+        if ((x || y) && predicate(x, y)) cells.push({ x, y });
+      }
+    }
+    return cells;
+  };
+  const LITE_OUTLINES = Object.freeze([
+    { id: 'square-ring', name: '小方环', style: 'geometry', cells: maskCells(['###', '#.#', '###']) },
+    { id: 'diamond', name: '菱形', style: 'geometry', cells: maskCells(['..#..', '.###.', '#####', '.###.', '..#..']) },
+    { id: 'wide-rectangle', name: '横向矩形', style: 'geometry', cells: maskCells(['#####', '##.##', '#####']) },
+    { id: 'cross-star', name: '十字星', style: 'geometry', cells: maskCells([
+      '...........', '...........', '...........', '....###....', '...#####...',
+      '...##.##...', '...#####...', '....###....', '...........', '...........', '...........'
+    ]) },
+    { id: 'rounded-ring', name: '圆角方环', style: 'geometry', cells: maskCells([
+      '...........', '...........', '...........', '...#####...', '...#####...',
+      '...##.##...', '...#####...', '...#####...', '...........', '...........', '...........'
+    ]) },
+    { id: 'winged-cross', name: '宽翼十字', style: 'geometry', cells: maskCells([
+      '...........', '...........', '....###....', '....###....', '..#######..',
+      '..###.###..', '..#######..', '....###....', '....###....', '...........', '...........'
+    ]) },
+    { id: 'faceted-diamond', name: '菱形扩展', style: 'geometry', cells: predicateCells((x, y) =>
+      Math.abs(x) + Math.abs(y) <= 4 && !(Math.abs(x) === 4 && y === 0) && !(Math.abs(y) === 4 && x === 0)) },
+    { id: 'christmas-tree', name: '圣诞树', style: 'object', cells: maskCells([
+      '.....#.....', '....###....', '...#####...', '....###....', '..#######..',
+      '...##.##...', '..#######..', '...#####...', '....###....', '....###....', '....###....'
+    ]) },
+    { id: 'cat-head', name: '小猫头', style: 'object', cells: maskCells([
+      '...........', '..##...##..', '..###.###..', '.#########.', '.#########.',
+      '.#########.', '.#########.', '..#######..', '...#####...', '...........', '...........'
+    ]) }
+  ].map((profile, stage) => Object.freeze({
+    ...profile,
+    stage,
+    cells: Object.freeze(profile.cells.map(cell => Object.freeze(cell)))
+  })));
+  // The editor writes ROTATION_LITE_LEVEL_DATA before this file is loaded.
+  // Keep the authored route above as a self-contained fallback for tests and
+  // for opening the rules file without the editor-generated bundle.
+  const normaliseCell = cell => {
+    const x = Array.isArray(cell) ? Number(cell[0]) : Number(cell?.x);
+    const y = Array.isArray(cell) ? Number(cell[1]) : Number(cell?.y);
+    return Number.isInteger(x) && Number.isInteger(y) && (x !== 0 || y !== 0) ? {x, y} : null;
+  };
+  const normaliseProfile = (profile, stage, levelIndex = stage, phaseIndex = 0, levelName = '') => {
+    const rawCells = Array.isArray(profile?.cells) ? profile.cells.map(normaliseCell).filter(Boolean) : [];
+    const unique = [...new Map(rawCells.map(cell => [`${cell.x},${cell.y}`, cell])).values()];
+    if (!unique.length) return null;
+    return Object.freeze({
+      id: String(profile.id || `stage-${stage + 1}`),
+      name: String(profile.name || `第${stage + 1}阶段`),
+      style: profile.style === 'object' ? 'object' : 'geometry',
+      levelName: String(profile.levelName || levelName || `第${levelIndex + 1}关`),
+      levelIndex, phaseIndex, stage,
+      goal: Number.isFinite(Number(profile.goal ?? profile.score)) ? Math.max(1, Math.round(Number(profile.goal ?? profile.score))) : null,
+      drops: Number.isFinite(Number(profile.drops ?? profile.dropLimit)) ? Math.max(1, Math.round(Number(profile.drops ?? profile.dropLimit))) : null,
+      cells: Object.freeze(unique.map(cell => Object.freeze(cell)))
+    });
+  };
+  // A level owns an ordered list of outlines.  The route plays them one after
+  // another inside the same level: clearing an outline moves on to the next one
+  // while the level score and drop budget carry over, and reaching the level
+  // goal settles the level immediately.  The level therefore supplies one goal
+  // and one drop budget for all of its outlines (authored on its first phase).
+  const buildLevel = (level, levelIndex) => {
+    const raw = Array.isArray(level?.phases) && level.phases.length ? level.phases : [level];
+    const phases = raw
+      .map((phase, phaseIndex) => normaliseProfile(phase, levelIndex, levelIndex, phaseIndex, level?.name))
+      .filter(Boolean);
+    if (!phases.length) return null;
+    const goal = phases[0].goal ?? BASE_RULES.scoreGoals[levelIndex] ?? phases[0].cells.length;
+    const drops = phases[0].drops ?? BASE_RULES.dropLimits[levelIndex] ?? BASE_RULES.dropLimit;
+    return Object.freeze({
+      id: String(level?.id || `level-${levelIndex + 1}`),
+      name: String(level?.name || phases[0].levelName || `第${levelIndex + 1}关`),
+      levelIndex, goal, drops,
+      phases: Object.freeze(phases.map(phase => Object.freeze({...phase, goal, drops})))
+    });
+  };
+  const buildLevels = data => Array.isArray(data?.levels) ? data.levels.map(buildLevel).filter(Boolean) : [];
+  const FALLBACK_LEVELS = Object.freeze(LITE_OUTLINES.map((profile, stage) => Object.freeze({
+    id: profile.id, name: profile.name, levelIndex: stage,
+    goal: BASE_RULES.scoreGoals[stage] ?? profile.cells.length,
+    drops: BASE_RULES.dropLimits[stage] ?? BASE_RULES.dropLimit,
+    phases: Object.freeze([Object.freeze({
+      ...profile, levelIndex: stage, phaseIndex: 0,
+      goal: BASE_RULES.scoreGoals[stage] ?? profile.cells.length,
+      drops: BASE_RULES.dropLimits[stage] ?? BASE_RULES.dropLimit
+    })])
+  })));
+  const externalLevels = buildLevels(root.ROTATION_LITE_LEVEL_DATA);
+  const ACTIVE_LEVELS = Object.freeze((externalLevels.length ? externalLevels : FALLBACK_LEVELS).map((level, stage) => Object.freeze({...level, stage})));
+  const ACTIVE_GOALS = Object.freeze(ACTIVE_LEVELS.map(level => level.goal));
+  const ACTIVE_DROPS = Object.freeze(ACTIVE_LEVELS.map(level => level.drops));
+  // First outline of every level, in route order.  Kept for the codex previews
+  // and for callers that only need one representative outline per level.
+  const ACTIVE_OUTLINES = Object.freeze(ACTIVE_LEVELS.map(level => level.phases[0]));
+  const RULES = Object.freeze({...BASE_RULES, levels: ACTIVE_LEVELS.length, scoreGoals: ACTIVE_GOALS, dropLimits: ACTIVE_DROPS});
   root.ROTATION_LITE = RULES;
+  root.ROTATION_LITE_OUTLINES = ACTIVE_OUTLINES;
+  root.ROTATION_LITE_LEVELS = ACTIVE_LEVELS;
+  root.ROTATION_LITE_LEVEL_DATA = root.ROTATION_LITE_LEVEL_DATA || {
+    version: 1,
+    levels: ACTIVE_LEVELS.map(level => ({
+      id: level.id, name: level.name,
+      phases: level.phases.map(phase => ({id: phase.id, name: phase.name, style: phase.style, goal: level.goal, drops: level.drops, cells: phase.cells.map(cell => ({x: cell.x, y: cell.y}))}))
+    }))
+  };
 
   const colorKey = cell => `${cell.x},${cell.y}`;
   const colorGroups = cells => {
@@ -106,16 +242,46 @@
     Object.defineProperty(p, 'rotationLiteInstalled', { value: true });
     const original = {};
     for (const key of ['reset', 'spawn', 'cells', 'lock', 'finishRotation', 'awardCells',
-      'completeCheckpoint', 'checkDeadlock', 'checkClear', 'resolvePendingSpecial', 'finishSettlement']) original[key] = p[key];
+      'completeCheckpoint', 'checkDropLimit', 'checkDeadlock', 'checkClear', 'resolvePendingSpecial', 'finishSettlement']) original[key] = p[key];
     const originalTarget = Object.getOwnPropertyDescriptor(p, 'target').get;
     const originalDropLimit = Object.getOwnPropertyDescriptor(p, 'dropLimit').get;
     const stageGoal = (game, stage) => {
-      const configured = RULES.scoreGoals[stage];
+      if(game.endless){
+        const native=originalTarget.call({ ...game, stage, outline: null }).goals[0];
+        return stage >= RULES.lateScoreStart ? Math.max(1, Math.round(native * RULES.lateScoreFactor)) : native;
+      }
+      const configured = ACTIVE_GOALS[stage];
       if (configured !== undefined) return configured;
       const native = originalTarget.call({ ...game, stage, outline: null }).goals[0];
       return stage >= RULES.lateScoreStart ? Math.max(1, Math.round(native * RULES.lateScoreFactor)) : native;
     };
-    const randomTool = game => RULES.tools[Math.floor(game.liteRandom() * RULES.tools.length)].id;
+    const randomTool = game => {
+      const pool = game.liteUnlockedTools ? game.liteUnlockedTools() : RULES.tools;
+      return pool[Math.floor(game.liteRandom() * pool.length)].id;
+    };
+    p.liteUnlockedTools = function (stage = this.stage ?? 0) {
+      if (this.endless) return RULES.tools;
+      const currentStage = Math.max(0, stage);
+      return RULES.tools.filter(tool => (tool.unlockStage ?? 0) <= currentStage);
+    };
+    p.liteUnseenShopTools = function (stage = this.stage ?? 0) {
+      const seen = new Set(this.lite?.seenShopTools || []);
+      return this.liteUnlockedTools(stage).filter(tool => !seen.has(tool.id));
+    };
+    p.liteMarkShopToolsSeen = function (toolIds) {
+      if (!this.lite) return [];
+      const seen = new Set(this.lite.seenShopTools || []);
+      const ids = Array.isArray(toolIds) ? toolIds : this.liteUnlockedTools().map(t => t.id);
+      const newlyMarked = [];
+      for (const id of ids) {
+        if (!seen.has(id)) {
+          seen.add(id);
+          newlyMarked.push(id);
+        }
+      }
+      this.lite.seenShopTools = Array.from(seen);
+      return newlyMarked;
+    };
     const emptyTools = () => Object.fromEntries(RULES.tools.map(tool => [tool.id, 0]));
     const rewardPhase = game => game.phase === 'checkpoint-complete';
     p.liteInventory = function () {
@@ -141,7 +307,11 @@
       delete this.lite.mods;delete this.lite.stageState;delete this.lite.heavyTurns;
       delete this.lite.growth;delete this.lite.milestones;
       this.lite.completedStages ||= [];
+      // Runs saved before levels owned several outlines have no outline index.
+      this.lite.phaseIndex ??= 0;
+      delete this.lite.pendingPhase;
       this.lite.extraDrops ??= 0;
+      this.lite.zeroDropKey ??= null;
       this.lite.tools ||= {};
       const retired={bonus:'blast',coin:'blast',chameleon:'column',pigment:'column',spread:'column',link:'heavy',charge:'heavy',prism:'pack'};
       // Saves from before the diamond block existed have no diamond counter.
@@ -168,6 +338,9 @@
         }
       }
       for(const offer of roll?.shopOffers||[])delete offer.sold;
+      if(!Array.isArray(this.lite.seenShopTools)){
+        this.lite.seenShopTools = ['shovel', 'swap', 'block-column', 'block-patch'];
+      }
       for(const tool of RULES.tools)this.lite.tools[tool.id] ??= 0;
       this.liteInventory();
       for(const cell of this.board||[])cell.placementId ??= 'legacy-'+cell.id;
@@ -205,37 +378,53 @@
       let removed=[],scoring=null,moved=false,compact=false,repack=false,heavyBoost=null;
       if(effect==='column'){
         const columns=new Set(cells.map(c=>c.x));
-        for(const c of this.board)if(columns.has(c.x))c.type=color;
+        for(const c of this.board)if(columns.has(c.x)&&!c.liteGlass)c.type=color;
       }else if(effect==='blast'){
         const snapshot=this.checkpointScore;
-        removed=this.board.filter(cell=>cell.type===color);
-        this.board=this.board.filter(cell=>cell.type!==color);
+        removed=this.board.filter(cell=>cell.type===color&&!cell.liteGlass);
+        this.board=this.board.filter(cell=>cell.type!==color||cell.liteGlass);
         scoring=this.awardCells(removed,'tool');
         const extra=root.liteBlastBonus(snapshot,removed.length);
         this.score+=extra;this.levelScore+=extra;this.checkpointScore+=extra;this.chainPoints+=extra;
         scoring.points+=extra;scoring.chainPoints=this.chainPoints;scoring.blastBonus=extra;scoring.source='blast';scoring.burst=true;
         compact=true;
-      }else if(effect==='trim'){
-        removed=this.board.filter(c=>!inside.has(colorKey(c)));
-        this.board=this.board.filter(c=>inside.has(colorKey(c)));
-        if(removed.length){scoring=this.awardCells(removed,'tool');scoring.source='trim';}
+      }else if(effect==='glass'||effect==='trim'){
+        const leftCount=cells.filter(c=>c.x<0).length;
+        const rightCount=cells.filter(c=>c.x>0).length;
+        const avgX=cells.reduce((sum,c)=>sum+c.x,0)/cells.length;
+        const isSymmetric=cells.every(c=>c.x===0)||(leftCount===rightCount&&Math.abs(avgX)<1e-4);
+        if(!isSymmetric){
+          const isLeft=avgX<0||(leftCount>rightCount);
+          const sourceCells=this.board.filter(c=>isLeft?c.x<0:c.x>0);
+          for(const c of sourceCells){
+            const mx=-c.x,my=c.y;
+            const existing=this.board.find(b=>b.x===mx&&b.y===my);
+            if(existing){
+              existing.type=c.type;
+              existing.liteGlass=true;
+              existing.liteEffect=null;
+            }else{
+              this.board.push({x:mx,y:my,type:c.type,id:this.id++,liteGlass:true,placementId:`${this.stage}:glass-${c.id}`});
+            }
+          }
+        }
       }else if(effect==='patch'){
         for(const cell of cells)cell.liteCoin=true;
       }else if(effect==='pack'){
         removed=cells;this.board=this.board.filter(c=>!ids.has(c.id));compact=true;repack=true;
       }else if(effect==='heavy'){
         // Compatibility for old saves/tests that invoke the former effect directly.
-        const targets=this.board.filter(cell=>cell.type===color),gain=targets.length*3;
+        const targets=this.board.filter(cell=>cell.type===color&&!cell.liteGlass),gain=targets.length*3;
         for(const cell of targets)cell.liteHeavyBonus=(heavyMultiplier(cell)-1)+gain;
         heavyBoost={count:targets.length,gain,ids:targets.map(cell=>cell.id),maxMultiplier:Math.max(...targets.map(heavyMultiplier))};
       }else if(effect==='diamond'){
         // Snapshot every same-colour cell at landing time. Later cells of the
         // same colour do not inherit the mark retroactively.
-        for(const cell of this.board)if(cell.type===color)cell.liteDiamond=true;
+        for(const cell of this.board)if(cell.type===color&&!cell.liteGlass)cell.liteDiamond=true;
       }
       // Landing powers are single use. Surviving cells keep their ordinary colour.
       for(const c of this.board)if(ids.has(c.id)){if(effect!=='patch')c.liteEffect=null;delete c.litePrismPending;}
-      const aliases={column:'column_dye',blast:'bomb',trim:'trim',patch:'stitch',pack:'pack',heavy:'heavy_drop',diamond:'diamond'};
+      const aliases={column:'column_dye',blast:'bomb',glass:'glass',trim:'glass',patch:'stitch',pack:'pack',heavy:'heavy_drop',diamond:'diamond'};
       const landed=before.filter(c=>ids.has(c.id)),contact={x:landed.reduce((n,c)=>n+c.x,0)/landed.length,y:landed.reduce((n,c)=>n+c.y,0)/landed.length};
       this.events.push({kind:'special',effect:aliases[effect],liteEffect:effect,cells:landed,contact,removed,scoring,heavyBoost});
       if(moved)this.events.push({kind:'compact',before});
@@ -248,8 +437,8 @@
     };
     p.reset = function (shapeSeed = 42, rewardSeed = shapeSeed) {
       this.lite = {
-        toolOrder: ['shovel','swap'], coins: 0, tools: { ...emptyTools(), shovel: 1, swap: 1 }, shopPurchases: {}, extraDrops: 0, buffs: [], specials: [], specialToolsMigrated:true, lastPlacementIds: [], clears: 0,
-        roll: null, clearCoinStage:-1, seed: (rewardSeed ^ 0x6a09e667) >>> 0
+        toolOrder: ['shovel','swap'], coins: 0, tools: { ...emptyTools(), shovel: 1, swap: 1 }, shopPurchases: {}, seenShopTools: ['shovel', 'swap', 'block-column', 'block-patch'], extraDrops: 0, buffs: [], specials: [], specialToolsMigrated:true, lastPlacementIds: [], clears: 0,
+        roll: null, clearCoinStage:-1, zeroDropKey:null, phaseIndex:0, seed: (rewardSeed ^ 0x6a09e667) >>> 0
       };
       const result = original.reset.call(this, shapeSeed, rewardSeed);
       this.pixelCards = {};
@@ -262,12 +451,81 @@
       this.stageCommitted = true;
       return result;
     };
+    // A suspended run can outlive an editor sync.  The old implementation
+    // only compared the authored profile id, so editing the cells/goal/drops
+    // in place (the normal editor workflow) left the restored `outline` with
+    // the previous geometry even though index.html contained the new data.
+    // Keep a compact content signature on the runtime outline and rebuild it
+    // whenever authored data changes.  Older saves have no signature and are
+    // deliberately treated as stale.
+    const profileSignature = (level, phase, index) => [
+      level.id,
+      phase.id,
+      index,
+      phase.style ?? '',
+      level.goal ?? '',
+      level.drops ?? '',
+      phase.cells.map(cell => `${cell.x},${cell.y}`).join(';')
+    ].join('|');
+    // Which outline of the current level is showing.  The index lives in the
+    // saved run so a resumed game comes back to the same outline.
+    const phaseIndexFor = game => {
+      const level = ACTIVE_LEVELS[game.stage];
+      if (!level) return 0;
+      const index = Math.floor(Number(game.lite?.phaseIndex) || 0);
+      return Math.max(0, Math.min(index, level.phases.length - 1));
+    };
     Object.defineProperty(p, 'target', { configurable: true, get() {
-      return originalTarget.call(this);
+      const level=ACTIVE_LEVELS[this.stage];
+      if(this.endless){
+        if(this.outline?.liteProfile)this.outline=null;
+        return originalTarget.call(this);
+      }
+      if(!level)return originalTarget.call(this);
+      const index=phaseIndexFor(this);
+      const profile=level.phases[index];
+      const signature=profileSignature(level,profile,index);
+      if(!this.outline||this.outline.stage!==this.stage||this.outline.liteProfile!==profile.id||this.outline.liteProfileSignature!==signature){
+        this.outline={stage:this.stage,growth:0,liteProfile:profile.id,liteProfileSignature:signature,cells:profile.cells.map(cell=>({...cell}))};
+      }
+      const goal=ACTIVE_GOALS[this.stage]??profile.cells.length;
+      return {name:profile.name,style:profile.style,levelName:level.name,levelIndex:level.levelIndex,phaseIndex:index,phaseCount:level.phases.length,playful:false,goals:[goal,goal,goal],cells:this.outline.cells};
     } });
+    // Several outlines belong to one level: clearing an outline moves the level on
+    // to its next outline, while the level score, the drop budget and the board
+    // carry over.  The score gate owns completion, so a clear that already reached
+    // the level goal is settled instead of switching outlines, and running out of
+    // drops keeps the current outline (the zero-drop fallback resolves the level).
+    p.liteNextPhaseIndex = function () {
+      const level=ACTIVE_LEVELS[this.stage];
+      if(this.endless||!level||level.phases.length<2)return null;
+      if(this.checkpointScore>=this.goal)return null;
+      if(this.dropsRemaining<=0)return null;
+      const next=phaseIndexFor(this)+1;
+      return next>=level.phases.length?null:next;
+    };
+    p.liteAdvancePhase = function (index) {
+      const level=ACTIVE_LEVELS[this.stage];
+      if(!level||!Number.isInteger(index)||index<=phaseIndexFor(this)||index>=level.phases.length)return false;
+      this.lite.phaseIndex=index;
+      this.outline=null;
+      this.events.push({kind:'lite-phase',stage:this.stage,levelIndex:level.levelIndex,phaseIndex:index,phaseCount:level.phases.length});
+      return true;
+    };
+    // The outline swap waits for the settle step so the finished outline is seen
+    // clearing before the next one is drawn.
+    p.checkClear = function (...args) {
+      const result=original.checkClear.apply(this,args);
+      if(result){
+        const next=this.liteNextPhaseIndex();
+        if(next!==null)this.lite.pendingPhase=next;
+      }
+      return result;
+    };
     Object.defineProperty(p, 'goal', { configurable: true, get() { return stageGoal(this, this.stage); } });
     Object.defineProperty(p, 'dropLimit', { configurable: true, get() {
-      const base=this.stage<RULES.lateDropStart?RULES.dropLimit:RULES.lateDropBase+(this.stage-RULES.lateDropStart)*RULES.lateDropStep+(this.stage>=RULES.lateScoreStart?RULES.postFourthDropBonus:0);
+      const configured=ACTIVE_DROPS[this.stage];
+      const base=configured??(this.stage<RULES.lateDropStart?RULES.dropLimit:RULES.lateDropBase+(this.stage-RULES.lateDropStart)*RULES.lateDropStep+(this.stage>=RULES.lateScoreStart?RULES.postFourthDropBonus:0));
       return (this.endless?Math.max(base,originalDropLimit.call(this)):base) + (this.lite?.extraDrops || 0);
     } });
     const originalRevive=p.revive;
@@ -285,6 +543,49 @@
       this._liteReviveApplying=true;
       try{return originalRevive.call(this);}finally{delete this._liteReviveApplying;}
     };
+    p.liteZeroDropClear = function () {
+      if(this.phase!=='play'||this.dropsRemaining>0)return false;
+      const key=`${this.stage}:${this.checkpoint}`;
+      if(this.lite.zeroDropKey===key)return false;
+      this.lite.zeroDropKey=key;
+      const targetCells=this.target.cells;
+      const targetKeys=new Set(targetCells.map(colorKey));
+      const occupied=new Set(this.board.map(colorKey));
+      const counts=new Map();
+      for(const cell of this.board)if(targetKeys.has(colorKey(cell)))counts.set(cell.type,(counts.get(cell.type)||0)+1);
+      const dominant=[...counts].sort((a,b)=>b[1]-a[1])[0]?.[0]||this.active?.color||this.nextColor||this.next||'L';
+      const added=[];
+      for(const target of targetCells){
+        if(occupied.has(colorKey(target)))continue;
+        // Borrow a nearby colour when possible so the safeguard still
+        // participates in the normal connected-colour scoring rules.
+        const neighbour=this.board.find(cell=>Math.abs(cell.x-target.x)+Math.abs(cell.y-target.y)===1);
+        added.push({...target,id:this.id++,type:neighbour?.type||dominant,placementId:`${this.stage}:zero-drop`,liteAttached:true});
+      }
+      if(added.length)this.board.push(...added);
+      this.active=null;
+      this.events.push({kind:'lite-zero-drop-fill',stage:this.stage,checkpoint:this.checkpoint,cells:added.map(cell=>({...cell}))});
+      const cleared=this.checkClear();
+      if(!cleared){
+        this.events.push({kind:'lite-zero-drop-clear',stage:this.stage,checkpoint:this.checkpoint,cells:[],scoring:null,skipped:true});
+        return false;
+      }
+      const event=this.events.findLast?.(entry=>entry.kind==='clear')||[...this.events].reverse().find(entry=>entry.kind==='clear');
+      if(event){
+        event.fallback=true;
+        event.source='zero-drop';
+        if(event.scoring)event.scoring.source='zero-drop';
+      }
+      this.events.push({kind:'lite-zero-drop-clear',stage:this.stage,checkpoint:this.checkpoint,cells:this.cleared?.map(cell=>({...cell}))||[],scoring:this.lastScore,skipped:false});
+      return true;
+    };
+    p.checkDropLimit = function (...args) {
+      if(this.phase==='play'&&this.dropsRemaining<=0){
+        if(this.liteZeroDropClear())return true;
+        if(this.checkpointScore>=this.goal&&this.completeCheckpoint())return true;
+      }
+      return original.checkDropLimit.apply(this,args);
+    };
     p.expandTarget = () => false;
     p.prepareStageOffers = function () { this.roundOffers = null; };
     p.drawSpecial = () => null;
@@ -298,6 +599,9 @@
     };
 
     p.spawn = function (...args) {
+      if (this.phase==='play' && this.dropsRemaining===0 && this.lite?.zeroDropKey!==`${this.stage}:${this.checkpoint}`) {
+        if (this.liteZeroDropClear()) return true;
+      }
       const old = this.active;
       const result = original.spawn.apply(this, args);
       if (this.active && this.active !== old && this.lite) {
@@ -325,6 +629,49 @@
       this.active = null;
       this.chain = 0;
       this.chainPoints = 0;
+      const before = this.board.map(c => ({ ...c }));
+      const belowIds = new Set(this.board.filter(b => {
+        const colCells = raw.filter(c => c.x === b.x);
+        return colCells.length > 0 && b.y < Math.min(...colCells.map(c => c.y));
+      }).map(b => b.id));
+
+      const minTargetY = this.target?.cells?.length ? Math.min(...this.target.cells.map(c => c.y)) : -12;
+      const floorY = Math.min(minTargetY, ...(this.board.length ? this.board.map(c => c.y) : [minTargetY]));
+
+      let moved = false;
+      let changed = true;
+      let iterations = 0;
+      while (changed && iterations < 50) {
+        changed = false;
+        iterations++;
+        for (const c of this.board) {
+          if (!belowIds.has(c.id) && this.board.some(b => belowIds.has(b.id) && b.x === c.x && c.y < b.y)) {
+            belowIds.add(c.id);
+          }
+        }
+        const targets = this.board.filter(b => belowIds.has(b.id))
+          .sort((a, b) => a.y - b.y || Math.abs(a.x) - Math.abs(b.x));
+        for (const b of targets) {
+          const dirX = -Math.sign(b.x);
+          const candidates = [];
+          candidates.push({ dx: 0, dy: -1 });
+          if (dirX !== 0) candidates.push({ dx: dirX, dy: -1 });
+          if (dirX !== 0) candidates.push({ dx: dirX, dy: 0 });
+
+          for (const { dx, dy } of candidates) {
+            const nx = b.x + dx, ny = b.y + dy;
+            if (ny < floorY) continue;
+            if (this.valid([{ x: nx, y: ny, type: b.type }], this.board.filter(c => c.id !== b.id))) {
+              b.x = nx || 0;
+              b.y = ny || 0;
+              changed = true;
+              moved = true;
+              break;
+            }
+          }
+        }
+      }
+
       const landed = [];
       // Resolve each column from its lowest cell upward so the cells can stack
       // naturally while every cell keeps its original x coordinate.
@@ -351,6 +698,7 @@
       this.board.push(...landed);
       this.lite.lastPlacementIds = landed.map(cell => cell.id);
       this.events.push({ kind: 'special', effect: 'heavy_drop', liteEffect: 'heavy', cells: landed.map(cell => ({ ...cell })), removed: [], contact: { x: landed.reduce((n, cell) => n + cell.x, 0) / landed.length, y: landed.reduce((n, cell) => n + cell.y, 0) / landed.length }, scoring: null, heavyDrop: true });
+      if (moved) this.events.push({ kind: 'compact', before });
       const lever = landed.length ? landed.reduce((n, cell) => n + cell.x, 0) / landed.length : 0;
       const torque = { lever, dir: lever >= 1 ? -1 : lever <= -1 ? 1 : 0 };
       this.lastTorque = torque;
@@ -376,6 +724,11 @@
     };
     p.finishSettlement = function (...args) {
       const result = original.finishSettlement.apply(this, args);
+      const pending = this.lite?.pendingPhase;
+      if (pending !== undefined) {
+        delete this.lite.pendingPhase;
+        this.liteAdvancePhase(pending);
+      }
       const torque = this.lite?.heavyRotationTorque;
       if (torque && this.phase === 'play' && torque.dir) {
         delete this.lite.heavyRotationTorque;
@@ -471,31 +824,43 @@
     p.liteUseTool = function (type) {
       if (!this.liteCanUseTool(type)) return false;
       if (type === 'shovel') {
-        const colors=['I','J','L','O','S','T','Z'];
-        const occupied=new Set(this.board.map(colorKey));
-        const targetCells=this.target.cells, targetKeys=new Set(targetCells.map(colorKey));
-        const radius=cell=>Math.max(Math.abs(cell.x),Math.abs(cell.y));
-        const maxRadius=targetCells.length?Math.max(...targetCells.map(radius)):0;
-        const ring=targetCells.filter(cell=>radius(cell)===maxRadius);
-        const inner=ring.filter(cell=>!occupied.has(colorKey(cell)));
-        const expansionBase=inner.length?inner:ring;
-        const expansion=[];
-        for(const cell of expansionBase)for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
-          const next={x:cell.x+dx,y:cell.y+dy};
-          if(!targetKeys.has(colorKey(next))&&!occupied.has(colorKey(next))&&!expansion.some(other=>colorKey(other)===colorKey(next)))expansion.push(next);
+        const colors = ['I','J','L','O','S','T','Z'];
+        const occupied = new Set(this.board.map(colorKey));
+        const baseCells = this.board.length ? this.board : [{ x: 0, y: 0 }];
+        const DIRS = [
+          [1, 0], [-1, 0], [0, 1], [0, -1],
+          [1, 1], [1, -1], [-1, 1], [-1, -1]
+        ];
+        const ring = [];
+        const ringSet = new Set();
+        for (const cell of baseCells) {
+          for (const [dx, dy] of DIRS) {
+            const nx = cell.x + dx, ny = cell.y + dy;
+            if (nx === 0 && ny === 0) continue;
+            if (nx < -12 || nx > 12 || ny < -12 || ny > 16) continue;
+            const key = `${nx},${ny}`;
+            if (!occupied.has(key) && !ringSet.has(key)) {
+              ringSet.add(key);
+              ring.push({ x: nx, y: ny });
+            }
+          }
         }
-        const outer=[...inner,...expansion];
-        const added=outer.map(cell=>({x:cell.x,y:cell.y,type:colors[Math.floor(this.liteRandom()*colors.length)],id:this.id++,placementId:`${this.stage}:spread-${this.id}`,liteAttached:true}));
-        if(!added.length)return false;
+        const added = ring.map(cell => ({
+          x: cell.x,
+          y: cell.y,
+          type: colors[Math.floor(this.liteRandom() * colors.length)],
+          id: this.id++,
+          placementId: `${this.stage}:spread-${this.id}`,
+          liteAttached: true
+        }));
+        if (!added.length) return false;
         this.board.push(...added);
-        // The outer-ring fill can create a thin, unsupported shell. Repack the
-        // complete board toward the rotor center so every spread stays compact.
-        this.settleRemaining(true);
-        this.lite.lastPlacementIds=[];
-        this.events.push({ kind:'lite-tool', tool:'shovel', spreadCells:added.map(cell=>({...cell})), amount:added.length, compact:true });
-        this.deadlockCells=[];this.deadlockWarning=null;
+        this.lite.lastPlacementIds = [];
+        this.events.push({ kind: 'lite-tool', tool: 'shovel', spreadCells: added.map(cell => ({ ...cell })), amount: added.length });
+        this.deadlockCells = []; this.deadlockWarning = null;
+        this.build.revision++;
       } else if (type === 'swap') {
-        const specials=RULES.tools.filter(tool=>tool.blockEffect);
+        const specials=this.liteUnlockedTools().filter(tool=>tool.blockEffect);
         const block=specials[Math.floor(this.liteRandom()*specials.length)];
         const id='block-'+block.blockEffect;
         this.liteGrantTool(id);
@@ -522,11 +887,18 @@
     };
     p.liteRewardOptions = function (_route='tool', previous=[]) {
       const shuffle=items=>{for(let i=items.length-1;i>0;i--){const j=Math.floor(this.liteRandom()*(i+1));[items[i],items[j]]=[items[j],items[i]];}return items;};
-      const ordinary=shuffle(RULES.tools.filter(t=>!t.blockEffect).map(t=>t.id));
-      const special=shuffle(RULES.tools.filter(t=>t.blockEffect).map(t=>t.id));
-      const options=[ordinary[0],special[0]];
+      const pool=this.liteUnlockedTools();
+      const ordinary=shuffle(pool.filter(t=>!t.blockEffect).map(t=>t.id));
+      const special=shuffle(pool.filter(t=>t.blockEffect).map(t=>t.id));
+      const options=[];
+      if(ordinary.length)options.push(ordinary[0]);
+      if(special.length)options.push(special[0]);
       const remaining=shuffle([...ordinary.slice(1),...special.slice(1)]);
-      options.push(remaining.find(id=>!previous.includes(id))??remaining[0]);
+      while(options.length<3&&remaining.length){
+        const candidate=remaining.find(id=>!previous.includes(id)&&!options.includes(id))??remaining.find(id=>!options.includes(id))??remaining[0];
+        options.push(candidate);
+        remaining.splice(remaining.indexOf(candidate),1);
+      }
       return shuffle(options);
     };
     const fibonacciPrice = count => {
@@ -548,8 +920,9 @@
     };
     p.liteCreateShop = function () {
       const shuffle=items=>{for(let i=items.length-1;i>0;i--){const j=Math.floor(this.liteRandom()*(i+1));[items[i],items[j]]=[items[j],items[i]];}return items;};
-      const normal=shuffle(RULES.tools.filter(t=>!t.blockEffect)).slice(0,4);
-      const special=shuffle(RULES.tools.filter(t=>t.blockEffect)).slice(0,4);
+      const pool=this.liteUnlockedTools();
+      const normal=shuffle(pool.filter(t=>!t.blockEffect)).slice(0,4);
+      const special=shuffle(pool.filter(t=>t.blockEffect)).slice(0,4);
       return shuffle([...normal,...special]).map((tool,slot)=>({slot,kind:tool.blockEffect?'special':'tool',item:tool.blockEffect||tool.id}));
     };
     p.liteBuyOffer = function (slot, quantity=1) {
@@ -606,7 +979,7 @@
     };
     p.liteNextStageInfo = function () {
       const stage=this.stage+1;
-      if(!this.endless&&stage>=RULES.levels)return {stage:RULES.levels-1,won:true,goal:null};
+      if(!this.endless&&stage>=ACTIVE_LEVELS.length)return {stage:ACTIVE_LEVELS.length-1,won:true,goal:null};
       return {stage,won:false,goal:stageGoal(this,stage)};
     };
     p.liteNext = function () {
@@ -624,9 +997,12 @@
       this.board = [];
       this.active = null;
       this.lite.clears = 0;
+      this.lite.phaseIndex = 0;
+      delete this.lite.pendingPhase;
       this.lite.roll = null;
       this.lite.lastPlacementIds = [];
       this.lite.extraDrops = 0;
+      this.lite.zeroDropKey = null;
 
       this.levelScore = 0;
       this.checkpointScore = 0;

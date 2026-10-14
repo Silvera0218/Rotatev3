@@ -4,13 +4,16 @@ let liteRewardStage = -1, liteRewardAdvance = null;
 let liteNaturalFall = true;
 let liteRewardPanel = null, liteLastHint = '';
 const liteAcquisitionQueue=[];let liteAcquisitionPlaying=false;
-let liteShopDialog=null,liteShopSelection=null,liteShopQuantity=1;
+let liteShopDialog=null,liteShopSelection=null,liteShopQuantity=1,liteShopSessionNewTools=null;
 let liteCompletionStage=-1,liteCompletionState=null;
 const liteTool = id => liteConfig.tools.find(tool=>tool.id===id);
 const liteToolName = id => liteTool(id)?.name||id;
 const liteSpecial=id=>liteConfig.specials.find(block=>block.id===id);
 const liteBlockIcon=id=>`<img class="lite-block-icon" src="./assets/icons/block-${id}.svg" width="32" height="32" alt="" aria-hidden="true">`;
-const liteText=(node,text)=>{text=String(text);if(node.textContent!==text)node.textContent=text;};
+// Some V3 panels are created lazily after the first frame.  Updating a
+// missing optional label must never stop the render loop; the native scene
+// should remain visible while that panel is being created.
+const liteText=(node,text)=>{if(!node)return;text=String(text);if(node.textContent!==text)node.textContent=text;};
 const liteIcon = (kind) => {
   if(liteTool(kind)?.blockEffect)return liteBlockIcon(liteTool(kind).blockEffect);
   if(liteTool(kind)){const asset=kind==='shovel'?'spread':kind;const ext=asset==='spread'?'png':'svg';return `<img src="./assets/icons/${asset}.${ext}" width="32" height="32" alt="" aria-hidden="true">`;}
@@ -23,6 +26,23 @@ I('game-ui').append(toolbar);
 const toolRail=document.createElement('div');toolRail.id='lite-tool-rail';toolRail.setAttribute('role','group');toolRail.setAttribute('aria-label','主动道具');
 for(const {id:kind} of liteConfig.tools){let button=I('lite-'+kind);if(!button){button=document.createElement('button');button.id='lite-'+kind;button.type='button';}button.className='insertion-button';button.innerHTML=`<span class="insertion-glyph">${liteIcon(kind)}</span><b class="insertion-price">0</b><span class="insertion-name">${liteToolName(kind)}</span>`;toolRail.append(button);}
 I('game-ui').append(toolRail);
+const toolFx=globalThis.createRotationToolFx?.({
+  stage:I('stage'),
+  rail:toolRail,
+  THREE:{
+    WebGLRenderer:a3,
+    Scene:ze,
+    OrthographicCamera:Ut,
+    ShaderMaterial:we,
+    PlaneGeometry:Pe,
+    BufferAttribute:at,
+    InstancedBufferAttribute:je,
+    InstancedMesh:ut,
+    Matrix4:oe,
+    Vector3:U,
+    Color:L0
+  }
+});
 const levelLabel=document.createElement('div');levelLabel.id='lite-level-label';toolbar.insertBefore(levelLabel,toolbar.querySelector('.lite-run-score'));
 for (const id of ['lite-special-hint']) {const node=document.createElement('div');node.id=id;I('game-ui').append(node);}
 const toast=document.createElement('div');toast.id='lite-toast';toast.setAttribute('role','status');I('stage').append(toast);let toastTimer;
@@ -30,6 +50,7 @@ function liteToast(text,acquired=false){toast.textContent=text;toast.classList.t
 function liteCanAct(){return he&&!G0&&!Pt&&!k0&&!Ie.busy&&!pe.particles.length&&!me.active&&L.phase==='play'&&I('overlay').hidden;}
 for(const tool of liteConfig.tools)I('lite-'+tool.id).onclick=()=>{
   if(!liteCanAct()||!L.liteUseTool(tool.id))return;
+  toolFx?.triggerButtonBurst(I('lite-'+tool.id));
   const supplyAmount=L.events.findLast(e=>e.kind==='lite-tool'&&e.tool==='supply')?.amount;
   _t();if(tool.id==='swap')resetDropVisuals();yt=0;fe.dirty=true;d3();se.play(tool.id==='swap'?'lock':'clear');
   const spreadAmount=L.events.findLast(e=>e.kind==='lite-tool'&&e.tool==='shovel')?.amount;const messages={shovel:`蔓延填补 ${spreadAmount||0} 格`,swap:'获得随机特殊方块',supply:`本关投放机会 +${supplyAmount}`,dye:'当前落块已染成棋盘主色',repair:'落空容错 +1'};liteToast(tool.blockEffect?'当前落块已改造为'+tool.name:messages[tool.id]);liteSaveSafe();
@@ -39,7 +60,14 @@ zf.sync=function(){I('buff-hud').hidden=true;};
 // Eliminate original card, insertion and rotor-choice entry points in this copy.
 ka = startWithoutRotor;
 const liteOriginalStart=ka;
-ka=function(...args){g5=true;liteResetCompletion();liteRewardStage=-1;liteAcquisitionQueue.length=0;I('stage').querySelectorAll('.lite-clear-burst').forEach(n=>n.remove());liteCloseReward();const result=liteOriginalStart(...args);L.beginStage();S1(`填满轮廓得分 · 本关目标 ${L.goal} 分`);liteSync();return result;};
+// Never set the native endless flag here.  `ka()` assigns `endless = g5`, and
+// endless mode explicitly bypasses every editor-authored outline, goal and drop
+// budget, so hard-coding the flag made the whole game ignore lite-levels.js:
+// the start screen advertised "第 1 关 · 阶段 1 · 1 / 9" and the run then began
+// with native procedural outlines.  Leave the flag to the caller (the start
+// screen sets it to false for a fresh authored run and the resume path restores
+// it from the save) so editor data always reaches gameplay.
+ka=function(...args){liteResetCompletion();liteRewardStage=-1;liteAcquisitionQueue.length=0;I('stage').querySelectorAll('.lite-clear-burst').forEach(n=>n.remove());liteCloseReward();const result=liteOriginalStart(...args);L.beginStage();S1(`填满轮廓得分 · 本关目标 ${L.goal} 分`);liteSync();return result;};
 Ca=function(){L.beginStage();G0=false;I('overlay').hidden=true;};
 const liteOriginalWa=wa;
 wa=function(){liteOriginalWa();if(L.lite){I('phase-label').textContent='本关得分';I('goal-track').setAttribute('aria-label','本关分数进度');}};
@@ -49,8 +77,28 @@ function liteSync(){
   if(!L.lite)return;
   liteSyncSound();
   liteSyncInventory();liteSyncLives();
-  liteText(I('round'),L.endless?`无尽 · 第 ${L.stage+1} 关`:`第 ${L.stage+1} / ${liteConfig.levels} 关`);
-  liteText(levelLabel,L.endless?`无尽 · 第 ${L.stage+1} 关`:`第 ${L.stage+1} / ${liteConfig.levels} 关`);
+  const authoredTarget=L.endless?null:L.target;
+  // Levels own several outlines; show the outline position only when a level has
+  // more than one, and keep the trailing counter on the level count.
+  const authoredPhase=authoredTarget?.phaseCount>1?` · 阶段 ${(authoredTarget.phaseIndex??0)+1}/${authoredTarget.phaseCount}`:'';
+  const authoredLabel=authoredTarget?.levelName?`${authoredTarget.levelName}${authoredPhase}`:`第 ${L.stage+1} 关`;
+  liteText(I('round'),L.endless?`无尽 · 第 ${L.stage+1} 关`:`${authoredLabel} · ${L.stage+1} / ${liteConfig.levels}`);
+  liteText(levelLabel,L.endless?`无尽 · 第 ${L.stage+1} 关`:`${authoredLabel} · ${L.stage+1} / ${liteConfig.levels}`);
+  // Keep the visible HUD tied to the same authored profile as the model.  The
+  // native renderer also updates these nodes, but doing it here makes the
+  // editor's score, drop budget, and outline count authoritative even when a
+  // browser restores a partially rendered page from its back-forward cache.
+  const authoredGoal=L.endless?L.goal:(liteConfig.scoreGoals?.[L.stage]??L.goal);
+  const authoredDrops=L.endless?L.dropLimit:(liteConfig.dropLimits?.[L.stage]??L.dropLimit);
+  liteText(I('goal-score'),`/ ${Ne(authoredGoal)}`);
+  I('goal-track').setAttribute('aria-valuemax',String(authoredGoal));
+  I('goal-track').setAttribute('aria-valuenow',String(Math.min(authoredGoal,Math.max(0,L.score))));
+  liteText(I('drops-remaining'),`${Math.max(0,L.dropsRemaining)} / ${authoredDrops}`);
+  if(authoredTarget){
+    const targetName=I('target-name'),targetCount=I('count');
+    if(targetName)liteText(targetName,authoredTarget.name||'轮廓');
+    if(targetCount)liteText(targetCount,`${L.filled} / ${authoredTarget.cells.length}`);
+  }
   // The model has saved the award; the HUD credits it as each coin reaches the wallet.
   const clearState=liteCompletionState?.stage===L.stage?liteCompletionState:null;
   const pendingClear=L.phase==='checkpoint-complete'&&!L.lite.roll&&L.lite.clearCoinStage===L.stage&&liteCompletionStage!==L.stage;
@@ -143,11 +191,11 @@ function liteShowCoinReward(amount,anchor){
 Of=function(scoring,cells=[]){
   const lastIds=new Set(L.lite.lastPlacementIds||[]),placed=cells.filter(c=>lastIds.has(c.id));
   const anchor=(placed.length?placed:cells).reduce((last,c)=>!last||c.id>last.id?c:last,null)||{x:0,y:0,type:'O'};
-  const materialColors={column:'#63d9ff',blast:'#ff9658',trim:'#a6ee58',patch:'#ff96bf',pack:'#ae8bff',heavy:'#b6c9de',diamond:'#74e7ff'};
+  const materialColors={column:'#63d9ff',blast:'#ff9658',glass:'#5ee6ff',trim:'#5ee6ff',patch:'#ff96bf',pack:'#ae8bff',heavy:'#b6c9de',diamond:'#74e7ff'};
   const color=materialColors[anchor.liteEffect]||'#'+(i9[anchor.color||anchor.type]||i9.O).toString(16).padStart(6,'0');
   const combo=Math.max(scoring.chain||1,scoring.streak||1),words=['','','二','三','四','五','六','七','八','九','十'];
   liteClearBurst(cells,anchor,color,combo);
-  const title=combo>1?`${words[combo]||combo}连消除`:({'blast':'爆炸消除','trim':'修枝消除','tool':'方块消除','outside':'界外消除','loose-outline':'缺口消除'}[scoring.source]||'轮廓消除');
+  const title=combo>1?`${words[combo]||combo}连消除`:({'blast':'爆炸消除','glass':'玻璃镜像','trim':'玻璃镜像','tool':'方块消除','outside':'界外消除','loose-outline':'缺口消除','zero-drop':'保底消除'}[scoring.source]||'轮廓消除');
   const box=I('score-feedback'),number=I('feedback-points');
   c3={t:0,duration:zt?1.25:1.65,anchor:{x:anchor.x,y:anchor.y},combo};scorePopupPulse=null;
   box.hidden=false;box.dataset.tier=combo>=3?'burst':combo>1?'chain':'normal';box.style.setProperty('--score-color',color);
@@ -179,7 +227,7 @@ Ta=function(dt){
   box.style.opacity=String(Math.min(1,(c3.duration-c3.t)/.32));
   box.style.transform=`translate(-50%,calc(-100% - ${zt?0:Math.max(0,c3.t-.22)*24}px))`;
 };
-function liteCloseReward(){liteRewardAdvance=null;liteCloseShopDetail(false);if(liteRewardPanel){liteRewardPanel.hidden=true;liteRewardPanel.inert=false;liteRewardPanel.removeAttribute('aria-busy');}I('lite-shop-hero')?.setAttribute('hidden','');delete I('overlay').dataset.liteReward;delete I('overlay').dataset.litePage;}
+function liteCloseReward(){liteShopSessionNewTools=null;liteRewardAdvance=null;liteCloseShopDetail(false);if(liteRewardPanel){liteRewardPanel.hidden=true;liteRewardPanel.inert=false;liteRewardPanel.removeAttribute('aria-busy');}I('lite-shop-hero')?.setAttribute('hidden','');delete I('overlay').dataset.liteReward;delete I('overlay').dataset.litePage;}
 function liteCloseShopDetail(restoreFocus=true){
   const selection=liteShopSelection;liteShopSelection=null;
   const restore=()=>{if(restoreFocus&&selection){
@@ -256,14 +304,24 @@ function liteOpenShopDetail(offer,button,event){
 function liteCreateReward(){
   if(liteRewardPanel)return;
   liteRewardPanel=document.createElement('section');liteRewardPanel.id='lite-reward-panel';liteRewardPanel.hidden=true;
-  liteRewardPanel.innerHTML='<div id="lite-reward-heading"><h2 id="lite-reward-title">补给站</h2><div class="v3-supply-actions"><button id="v3-shop-open" type="button" aria-label="打开道具商店"><img src="./assets/icons/shop-cart.svg" width="26" height="26" alt=""><span>商店</span></button><span id="lite-shop-wallet"></span></div></div><p id="lite-reward-summary">免费补给 · 选择一件</p><div id="v3-reward-choices"></div><div id="lite-choice-refresh"><button id="lite-refresh-reward" type="button"></button><span id="lite-refresh-status" role="status"></span></div><div id="lite-shop" hidden><nav id="lite-shop-categories" aria-label="商品分类"></nav><div id="lite-shop-offers"></div></div><button id="lite-next" type="button" hidden>返回补给</button>';
+  liteRewardPanel.innerHTML='<div id="lite-reward-heading"><h2 id="lite-reward-title">补给站</h2><div class="v3-supply-actions"><button id="v3-shop-open" type="button" aria-label="打开道具商店"><img src="./assets/icons/shop-cart.svg" width="26" height="26" alt=""><span class="v3-shop-btn-text"><span class="v3-shop-btn-main">商店</span><span class="v3-shop-btn-sub"></span></span><span class="v3-shop-badge" id="v3-shop-badge" aria-hidden="true" hidden>!</span></button><span id="lite-shop-wallet"></span></div></div><p id="lite-reward-summary">免费补给 · 选择一件</p><div id="v3-reward-choices"></div><div id="lite-choice-refresh"><button id="lite-refresh-reward" type="button"></button><span id="lite-refresh-status" role="status"></span></div><div id="lite-shop" hidden><nav id="lite-shop-categories" aria-label="商品分类"></nav><div id="lite-shop-offers"></div></div><button id="lite-next" type="button" hidden>返回补给</button>';
   const hero=document.createElement('header');hero.id='lite-shop-hero';hero.hidden=true;hero.innerHTML='<div class="lite-shop-hero-inner"><img src="./assets/ui/shopkeeper.png" width="128" height="128" alt="机器人店员"><div><span>SHOP</span><h2>道具商店</h2></div></div>';
   I('overlay').querySelector('.dialog').append(hero,liteRewardPanel);
   for(const [id,label] of [['all','全部'],['tool','道具'],['special','特殊方块']]){
     const button=document.createElement('button');button.type='button';button.dataset.category=id;button.textContent=label;
     button.onclick=()=>{L.lite.roll.shopCategory=id;liteUpdateReward();liteSaveSafe();};I('lite-shop-categories').append(button);
   }
-  I('v3-shop-open').onclick=()=>{if(L.lite.roll.adReadyAt)return;L.lite.roll.shopOpen=true;liteUpdateReward();liteSaveSafe();};
+  I('v3-shop-open').onclick=()=>{
+    if(L.lite.roll.adReadyAt)return;
+    const unseen=L.liteUnseenShopTools?L.liteUnseenShopTools():[];
+    if(unseen.length>0){
+      liteShopSessionNewTools=new Set(unseen.map(t=>t.id));
+      L.liteMarkShopToolsSeen(unseen.map(t=>t.id));
+    }
+    L.lite.roll.shopOpen=true;
+    liteUpdateReward();
+    liteSaveSafe();
+  };
   I('lite-next').onclick=()=>{L.lite.roll.shopOpen=false;liteUpdateReward();liteSaveSafe();};
   I('lite-refresh-reward').onclick=event=>{const r=L.lite.roll;if(r.settled){liteContinueAfterReward(I('lite-refresh-reward'),event);return;}const changed=r.freeRefreshes>0?L.liteRefreshReward():L.liteStartRewardAd();if(changed){d3();se.play('turn');liteUpdateReward();liteSaveSafe();}};
 }
@@ -283,12 +341,33 @@ function liteUpdateReward(){
   I('v3-reward-choices').hidden=shop;I('lite-choice-refresh').hidden=shop;I('v3-shop-open').hidden=shop;I('lite-reward-summary').hidden=shop;
   I('lite-reward-summary').textContent=roll.chosenTool?'已领取 '+liteTool(roll.chosenTool).name+' ×1':'免费补给 · 选择一件';
   I('lite-reward-title').textContent=shop?'道具商店':'补给站';I('dialog-tag').textContent=shop?'ROTATION V3 · 商店':'ROTATION V3 · 三选一';
-  I('lite-shop-wallet').textContent=`${L.lite.coins} 金币`;I('v3-shop-open').disabled=!!roll.adReadyAt;
+  I('lite-shop-wallet').textContent=`${L.lite.coins} 金币`;
+  const shopBtn=I('v3-shop-open');
+  if(shopBtn){
+    const adWaiting=!!roll.adReadyAt;
+    shopBtn.disabled=adWaiting;
+    shopBtn.dataset.available='true';
+    const subLabel=shopBtn.querySelector('.v3-shop-btn-sub');
+    if(subLabel){
+      subLabel.textContent=adWaiting?'播放中…':'进店';
+    }
+    const tipText=adWaiting?'广告播放中…':'道具商店（点击进入选购）';
+    shopBtn.title=tipText;
+    shopBtn.setAttribute('aria-label',tipText);
+    const unseen=L.liteUnseenShopTools?L.liteUnseenShopTools():[];
+    const badge=I('v3-shop-badge');
+    if(badge){
+      badge.hidden=shop||unseen.length===0;
+    }
+  }
   const choices=I('v3-reward-choices');choices.replaceChildren();
+  const unseenIds=new Set((L.liteUnseenShopTools?L.liteUnseenShopTools():[]).map(t=>t.id));
   for(const id of roll.toolOptions){
     const tool=liteTool(id),button=document.createElement('button');button.className='v3-reward-choice';button.type='button';button.dataset.tool=id;button.dataset.kind=tool.blockEffect?'special':'tool';button.disabled=roll.settled||!!roll.adReadyAt;
-    button.innerHTML='<span class="v3-choice-art">'+liteIcon(id)+'</span><span class="v3-choice-copy"><small></small><strong></strong><span></span></span><b>+1</b><span class="v3-choice-claim">领取 <i>→</i></span>';
-    button.querySelector('small').textContent=tool.blockEffect?'特殊方块':'道具';button.querySelector('strong').textContent=tool.name;button.querySelector('.v3-choice-copy>span').textContent=tool.description;
+    const isNew=((tool.unlockStage??0)===L.stage&&(tool.unlockStage??0)>0)||unseenIds.has(id);
+    button.dataset.new=String(isNew);
+    button.innerHTML='<span class="v3-choice-art">'+liteIcon(id)+'</span><span class="v3-choice-copy"><div class="v3-choice-head"><small></small><span class="v3-choice-new-tag"'+(isNew?'':' hidden')+'>NEW!</span></div><strong></strong><span class="v3-choice-desc"></span></span><b>+1</b><span class="v3-choice-claim">领取 <i>→</i></span>';
+    button.querySelector('small').textContent=tool.blockEffect?'特殊方块':'道具';button.querySelector('strong').textContent=tool.name;button.querySelector('.v3-choice-desc').textContent=tool.description;
     button.dataset.claimed=String(roll.chosenTool===id);
     if(roll.settled){button.querySelector('.v3-choice-claim').textContent=roll.chosenTool===id?'已领取':'未选择';button.querySelector('b').textContent=roll.chosenTool===id?'✓':'';}
     button.onclick=()=>{if(!L.liteChooseTool(id))return;liteSync();d3();liteUpdateReward();liteSaveSafe();se.play('clear');I('lite-refresh-reward').focus({preventScroll:true});};choices.append(button);
@@ -297,7 +376,9 @@ function liteUpdateReward(){
   const offers=I('lite-shop-offers');offers.replaceChildren();
   for(const offer of roll.shopOffers||[]){
     const tool=offer.kind==='special'?liteTool('block-'+offer.item):liteTool(offer.item),button=document.createElement('button');button.type='button';button.className='lite-shop-buy';button.dataset.slot=offer.slot;button.hidden=category!=='all'&&offer.kind!==category;
-    button.innerHTML='<span class="v3-shop-card-heading"><strong></strong><span class="v3-shop-card-labels"><span class="v3-shop-owned" hidden></span><span class="lite-shop-category"></span></span></span><span class="lite-shop-art">'+liteIcon(tool.id)+'</span><span class="lite-shop-price"></span>';
+    const isNew=liteShopSessionNewTools?liteShopSessionNewTools.has(tool.id):false;
+    button.dataset.new=String(isNew);
+    button.innerHTML='<span class="v3-shop-card-heading"><strong></strong><span class="v3-shop-card-labels"><span class="v3-shop-new-tag"'+(isNew?'':' hidden')+'>NEW!</span><span class="v3-shop-owned" hidden></span><span class="lite-shop-category"></span></span></span><span class="lite-shop-art">'+liteIcon(tool.id)+'</span><span class="lite-shop-price"></span>';
     const owned=L.lite.tools[tool.id]||0,badge=button.querySelector('.v3-shop-owned');badge.hidden=owned<=0;badge.textContent=`已拥有 ×${owned}`;
     button.querySelector('strong').textContent=tool.name;button.querySelector('.lite-shop-category').textContent=tool.blockEffect?'特殊方块':'道具';button.querySelector('.lite-shop-price').textContent=`${L.liteOfferPrice(offer)} 金币`;
     button.title=tool.description;button.onclick=event=>liteOpenShopDetail(offer,button,event);offers.append(button);
@@ -478,7 +559,15 @@ B6=function(){
   }else leave();
 };
 const liteOriginalGf=Gf;
-Gf=function(){liteResetCompletion();liteRewardStage=-1;liteOriginalGf();liteSync();};
+Gf=function(){
+  liteResetCompletion();liteRewardStage=-1;liteOriginalGf();
+  // Suspended runs written before this fix are marked endless, and a resumed
+  // endless run keeps using native outlines, so the editor would still look
+  // out of sync for anyone with an old save.  This copy no longer offers the
+  // endless entry, so resume such a save on the authored route instead.
+  if(L.endless&&liteConfig.levels){L.endless=false;g5=false;liteSaveSafe();}
+  liteSync();
+};
 // Catalogue previews run on throwaway models and never touch the live save.
 const rotationCodex=createRotationCodex({config:liteConfig,makeGame:()=>new e9(42),entry:I('home-library-open'),onResume:()=>{se.unlock();$9();},onHome:()=>I('return-home').click()});
 Fa=function(){_t();G0=true;se.pause();I('overlay').dataset.pause='true';I('stage').classList.add('pause-active');I('game-ui').inert=true;I('game-ui').setAttribute('aria-hidden','true');rotationCodex.open(I('pause'),{mode:'pause'});};
@@ -581,20 +670,27 @@ new MutationObserver(trimSettingsStatus).observe(settingsStatus,{childList:true,
 // Cell-owned multipliers stay attached to the rendered cell through every move.
 const heavyMarkers=document.createElement('div');heavyMarkers.id='lite-heavy-markers';heavyMarkers.setAttribute('aria-hidden','true');I('game-ui').append(heavyMarkers);
 function liteSyncHeavyMarkers(){
-  const cells=L.board.filter(cell=>cell.liteHeavyBonus>0||cell.liteDiamond),ids=new Set(cells.map(cell=>String(cell.id)));
+  const cells=L.board.filter(cell=>cell.liteHeavyBonus>0||cell.liteDiamond||cell.liteCoin),ids=new Set(cells.map(cell=>String(cell.id)));
   for(const node of [...heavyMarkers.children])if(!ids.has(node.dataset.cell))node.remove();
   for(const cell of cells){
     let node=heavyMarkers.querySelector(`[data-cell="${cell.id}"]`);if(!node){node=document.createElement('span');node.dataset.cell=cell.id;heavyMarkers.append(node);}
-    node.textContent=cell.liteDiamond?'×3':'×'+(1+cell.liteHeavyBonus);
+    node.textContent=cell.liteCoin?'🪙':(cell.liteDiamond?'×3':'×'+(1+cell.liteHeavyBonus));
+    node.className=cell.liteCoin?'lite-coin-marker':'';
     const position=rotorCellPositions.get(cell.id)||cell,p=new U(position.x,position.y,position.z||0).project(Bt);
     const edge=new U(position.x+.5,position.y,position.z||0).project(Bt),width=Math.max(12,Math.abs(edge.x-p.x)*Ge.w);
-    node.style.left=(p.x+1)*Ge.w/2+'px';node.style.top=Ge.top+(1-p.y)*Ge.playHeight/2+'px';node.style.fontSize=Math.max(6,Math.min(10,width/(node.textContent.length*.65)))+'px';
+    node.style.left=(p.x+1)*Ge.w/2+'px';node.style.top=Ge.top+(1-p.y)*Ge.playHeight/2+'px';
+    if(!cell.liteCoin)node.style.fontSize=Math.max(6,Math.min(10,width/(node.textContent.length*.65)))+'px';
   }
 }
 function liteFrame(){if(he){liteSyncHeavyMarkers();liteUpdateRevive();liteUpdateCompletion(performance.now());liteSync();litePlayPendingAcquisition();if(L.lite.roll?.adReadyAt){if(L.liteFinishRewardAd()){d3();liteUpdateReward();liteSaveSafe();se.play('turn');}else liteUpdateRefresh();}}}
+// The authored HUD is an enhancement layer.  If a browser restores a page
+// before one of its optional nodes exists, keep the native scene renderer
+// alive instead of allowing one HUD exception to leave the canvas black.
+let liteFrameErrorLogged=false;
+function liteFrameSafe(){try{liteFrame();}catch(error){if(!liteFrameErrorLogged){liteFrameErrorLogged=true;console.error('[ROTATION V3] optional HUD frame failed',error);}}}
 // Deterministic fixture access is only present with the explicit QA query flag.
 if(new URLSearchParams(location.search).has('qa')){
-  window.__liteQA={game:L,action:H6,specialVisuals:()=>liteBlockFx.snapshot(),refresh:()=>{H3=-1;V3();d3();Qt();},get paused(){return G0;},set paused(value){G0=value;},set naturalFall(value){liteNaturalFall=value;},get busy(){return !!k0||Ie.busy||!!pe.particles.length||me.active;},screenCell(x,y){const rect=I('stage').getBoundingClientRect(),p=new U(x,y,0).project(Bt);return{x:rect.left+I('stage').clientLeft+(p.x+1)*Ge.w/2,y:rect.top+I('stage').clientTop+Ge.top+(1-p.y)*Ge.playHeight/2};},start(){ka(true);},settle(){for(let i=0;i<100;i++){if(L.phase==='rotating')L.finishRotation();else if(L.phase==='clearing')L.finishClear();else if(L.phase==='settling')L.finishSettlement();else break;}L.events=[];k0=null;Ie.reset();pe.reset();V3();Qt();},renderer:de};
+  window.__liteQA={game:L,action:H6,specialVisuals:()=>liteBlockFx.snapshot(),refresh:()=>{H3=-1;V3();d3();Qt();},showReward(){liteShowReward();d3();liteUpdateReward();},get paused(){return G0;},set paused(value){G0=value;},set naturalFall(value){liteNaturalFall=value;},get busy(){return !!k0||Ie.busy||!!pe.particles.length||me.active;},screenCell(x,y){const rect=I('stage').getBoundingClientRect(),p=new U(x,y,0).project(Bt);return{x:rect.left+I('stage').clientLeft+(p.x+1)*Ge.w/2,y:rect.top+I('stage').clientTop+Ge.top+(1-p.y)*Ge.playHeight/2};},start(){ka(true);},settle(){for(let i=0;i<100;i++){if(L.phase==='rotating')L.finishRotation();else if(L.phase==='clearing')L.finishClear();else if(L.phase==='settling')L.finishSettlement();else break;}L.events=[];k0=null;Ie.reset();pe.reset();V3();Qt();},renderer:de};
   window.__THREE_GAME_TEST_HOOKS__={
     async setState(name){
       if(!['active-play','reward','failure'].includes(name))throw Error('Unknown state '+name);
