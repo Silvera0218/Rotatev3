@@ -5,7 +5,7 @@
   const SPECIALS = [
     {id:'column',unlockStage:0,basePrice:5,name:'变色方块',description:'落地后，将自身所在的整列染成同色'},
     {id:'patch',unlockStage:0,basePrice:5,name:'金币方块',description:'消除时，按本次消除格数获得金币',detail:'落地后保留金币标记。消除时，每个金币格获得等同于本批消除格数的金币；多个金币格分别触发。铲除或重排消耗不发金币。'},
-    {id:'heavy',unlockStage:0,basePrice:8,name:'超重方块',description:'落地后按占用列数向下消除整列方块并消除自身，剩余方块向内收缩聚拢',detail:'各格分别独立下落至落位点，按占用列数向下消除该列下方全部方块，自身也一同消除（不造成悬空）；每消除1格使每个消除方块基础分+1（如消除10格则每格基础分+10）；其余方块按向心聚拢规则收缩填补空隙；落空不扣生命。'},
+    {id:'heavy',unlockStage:0,basePrice:8,name:'超重方块',description:'落地后按占用列数向下消除整列方块并消除自身，剩余方块向内收缩聚拢',detail:'各格分别独立下落至落位点，按占用列数向下消除该列下方全部方块，自身也一同消除（不造成悬空）；每消除3格使每个消除方块基础分+1（最高+3）；其余方块按向心聚拢规则收缩填补空隙；落空不扣生命。'},
     {id:'pack',unlockStage:2,basePrice:7,name:'强迫症方块',description:'落地后，消耗自身将其余方块向内重排'},
     {id:'glass',unlockStage:3,basePrice:8,name:'玻璃方块',description:'落地后将一侧方块镜像填充至另一侧空格，生成方块变为玻璃方块',detail:'落地后，若位于转轴左侧，将左侧所有方块对称镜像填充至右侧空格（不覆盖对侧已有方块）；若位于右侧则镜像填充至左侧空格。镜像生成方块转化为半透明玻璃方块（原侧方块不变），保留原色并可正常参与消除，且不受以方块颜色为条件的效果影响。4长条形方块若在中心对称掉落，则不触发镜像。'},
     {id:'diamond',unlockStage:4,basePrice:10,name:'钻石方块',description:'同色标记格消除时分数×3',detail:'落地时标记棋盘上全部同色方块；这些格子消除时按基础分的3倍结算。标记会跟随方块移动、旋转和重排。'},
@@ -767,7 +767,7 @@
       const scoring = this.awardCells(removed, 'tool');
       if (removed.length > 0) {
         const count = removed.length;
-        const extraBasePerCell = count;
+        const extraBasePerCell = Math.min(3, Math.floor(count / 3));
         const extraBaseBonus = count * extraBasePerCell;
         const boost = scoring.boost ?? 1;
         const synergy = scoring.synergyMultiplier ?? 1;

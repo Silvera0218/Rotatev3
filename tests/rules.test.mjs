@@ -792,8 +792,8 @@ test('heavy block lands into position and eliminates downwards per occupied colu
  assert.equal(specialEvent.cells[0].x,2);
  assert.equal(specialEvent.cells[0].y,2,'heavy cell should land at y = 2');
  assert.equal(specialEvent.removed.length,9,'should eliminate all 8 blocks downwards plus the heavy block itself');
- assert.equal(specialEvent.scoring.heavyBonus,81,'9 removed cells * 9 extra base points = 81');
- assert.equal(specialEvent.scoring.heavyBonusPerCell,9);
+ assert.equal(specialEvent.scoring.heavyBonus,27,'9 removed cells * 3 extra base points = 27');
+ assert.equal(specialEvent.scoring.heavyBonusPerCell,3);
  assert.equal(g.board.length,1,'all 8 blocks in column 2 removed, remaining column 4 block kept');
  assert(!g.board.some(c=>c.x===2),'no blocks remain in column 2');
  const compactEvent=g.events.find(e=>e.kind==='compact');
@@ -802,6 +802,34 @@ test('heavy block lands into position and eliminates downwards per occupied colu
  const remainingDistances=g.board.map(c=>Math.abs(c.x)+Math.abs(c.y));
  assert(remainingDistances.every(d=>d < 4),'blocks should have moved closer to center');
  assert(g.lite.acquiredTools.includes('block-heavy'));
+
+ // Test tiered scaling of heavy bonus (+1 per 3 cells, capped at +3)
+ const gA = make();
+ gA.board = [{x:2, y:1, id:gA.id++, type:'L'}, {x:2, y:0, id:gA.id++, type:'L'}];
+ gA.active = {type:'I', shape:[[0,0]], x:2, y:5, liteEffect:'heavy', color:'I'};
+ gA.liteLockHeavy(true);
+ const evA = gA.events.find(e => e.kind==='special' && e.liteEffect==='heavy');
+ assert.equal(evA.removed.length, 3);
+ assert.equal(evA.scoring.heavyBonusPerCell, 1);
+ assert.equal(evA.scoring.heavyBonus, 3);
+
+ const gB = make();
+ gB.board = Array.from({length: 5}, (_, i) => ({x:2, y:1-i, id:gB.id++, type:'L'}));
+ gB.active = {type:'I', shape:[[0,0]], x:2, y:5, liteEffect:'heavy', color:'I'};
+ gB.liteLockHeavy(true);
+ const evB = gB.events.find(e => e.kind==='special' && e.liteEffect==='heavy');
+ assert.equal(evB.removed.length, 6);
+ assert.equal(evB.scoring.heavyBonusPerCell, 2);
+ assert.equal(evB.scoring.heavyBonus, 12);
+
+ const gC = make();
+ gC.board = Array.from({length: 11}, (_, i) => ({x:2, y:1-i, id:gC.id++, type:'L'}));
+ gC.active = {type:'I', shape:[[0,0]], x:2, y:5, liteEffect:'heavy', color:'I'};
+ gC.liteLockHeavy(true);
+ const evC = gC.events.find(e => e.kind==='special' && e.liteEffect==='heavy');
+ assert.equal(evC.removed.length, 12);
+ assert.equal(evC.scoring.heavyBonusPerCell, 3);
+ assert.equal(evC.scoring.heavyBonus, 36);
 });
 test('spread grows sequentially clockwise when center of gravity is to the right, and counterclockwise when to the left',()=>{
  const gRight=make();gRight.board=[{x:3,y:0,id:gRight.id++,type:'L'}];
