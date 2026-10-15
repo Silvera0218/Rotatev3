@@ -40,18 +40,18 @@ const makePhase=()=>new phaseContext.api.Game(42);
 const fillOutline=g=>{g.phase='play';g.board=g.target.cells.map((c,i)=>({...c,id:g.id++,type:i%2?'T':'S'}));return g;};
 
 test('inventory uses three kinds, stacks duplicates and promotes reserves in acquisition order',()=>{
-  const g=make();g.liteGrantTool('supply');g.liteGrantTool('block-heavy');g.liteGrantTool('repair');g.liteGrantTool('block-heavy');
-  assert.deepEqual(Array.from(g.liteInventory().active),['shovel','swap','supply']);
+  const g=make();g.liteGrantTool('shovel');g.liteGrantTool('supply');g.liteGrantTool('block-heavy');g.liteGrantTool('repair');g.liteGrantTool('block-heavy');
+  assert.deepEqual(Array.from(g.liteInventory().active),['swap','shovel','supply']);
   assert.deepEqual(Array.from(g.liteInventory().reserve),['block-heavy','repair']);assert.equal(g.lite.tools['block-heavy'],2);
   assert.equal(g.liteUseTool('block-heavy'),false);assert.equal(g.liteUseTool('supply'),true);
-  assert.deepEqual(Array.from(g.liteInventory().active),['shovel','swap','block-heavy']);
+  assert.deepEqual(Array.from(g.liteInventory().active),['swap','shovel','block-heavy']);
   assert.equal(g.liteUseTool('block-heavy'),true);assert.equal(g.lite.tools['block-heavy'],1);
   assert.deepEqual(Array.from(g.liteInventory().reserve),['repair']);
 });
 test('inventory reorder, saved order and reacquisition keep one position per kind',()=>{
-  const g=make();for(const id of ['supply','repair','block-glass'])g.liteGrantTool(id);
+  const g=make();g.liteGrantTool('shovel');for(const id of ['supply','repair','block-glass'])g.liteGrantTool(id);
   assert.equal(g.liteMoveTool('block-glass',2),true);
-  assert.deepEqual(Array.from(g.liteInventory().active),['shovel','swap','block-glass']);
+  assert.deepEqual(Array.from(g.liteInventory().active),['swap','shovel','block-glass']);
   const h=make();h.lite=JSON.parse(JSON.stringify(g.lite));h.liteEnsureExpansion();
   assert.deepEqual(Array.from(h.liteInventory().order),Array.from(g.liteInventory().order));
   h.liteMoveTool('swap',4);assert.deepEqual(Array.from(h.liteInventory().active),['shovel','block-glass','supply']);
@@ -59,7 +59,7 @@ test('inventory reorder, saved order and reacquisition keep one position per kin
   assert.equal(h.liteMoveTool('repair',-1),false);assert.equal(h.liteMoveTool('unknown',0),false);
 });
 test('shop and free reward put excess kinds in reserve and preserve them across stages',()=>{
-  const g=make();g.liteGrantTool('supply');const r=complete(g);g.lite.coins=100;
+  const g=make();g.liteGrantTool('shovel');g.liteGrantTool('supply');const r=complete(g);g.lite.coins=100;
   r.shopOffers=[{slot:0,kind:'special',item:'glass'}];assert.equal(g.liteBuyOffer(0),true);
   r.toolOptions=['repair'];assert.equal(g.liteChooseTool('repair'),true);
   assert.deepEqual(Array.from(g.liteInventory().reserve),['block-glass','repair']);
@@ -362,7 +362,7 @@ test('spread on empty board (开局) adds exactly 8 blocks around the rotor (0, 
 });
 
 test('swap grants a random special block and sends it to reserve when the three slots are full',()=>{
- const g=make();g.liteGrantTool('supply');g.lite.tools.swap=2;
+ const g=make();g.liteGrantTool('shovel');g.liteGrantTool('supply');g.lite.tools.swap=2;
  assert.equal(g.liteInventory().active.length,3);assert.equal(g.liteUseTool('swap'),true);
  const event=g.events.at(-1);assert.equal(event.kind,'lite-special-tool');assert.match(event.id,/^block-/);
  assert.equal(g.active!==null,true);assert.equal(g.lite.tools.swap,1);
@@ -476,9 +476,9 @@ test('V3 has only five tools and seven special blocks, with no Buff gains or gro
 });
 test('every reward gives three unique mixed choices and persists without reroll',()=>{
  for(let seed=0;seed<40;seed++){
-  const g=new ctx.api.Game(seed);g.stage=2;const r=complete(g);assert.equal(r.route,'tool');assert.equal(r.entered,true);assert.equal(r.toolOptions.length,3);assert.equal(new Set(r.toolOptions).size,3);assert(r.toolOptions.some(id=>id.startsWith('block-')));assert(r.toolOptions.some(id=>!id.startsWith('block-')));
-  const saved=JSON.stringify(g.lite),h=make();h.stage=g.stage;h.phase=g.phase;h.lite=JSON.parse(saved);h.litePrepareReward();assert.equal(JSON.stringify(h.lite),saved);
-  const id=r.toolOptions[0],before=g.lite.tools[id];assert.equal(g.liteNext(),false);assert.equal(g.liteChooseTool(id),true);assert.equal(g.liteChooseTool(id),false);assert.equal(g.lite.tools[id],before+1);assert.equal(g.liteNext(),true);assert.equal(g.stage,3);assert.equal(g.lite.tools[id],before+1);
+  const g=new ctx.api.Game(seed),r=complete(g);assert.equal(r.route,'tool');assert.equal(r.entered,true);assert.equal(r.toolOptions.length,3);assert.equal(new Set(r.toolOptions).size,3);assert(r.toolOptions.some(id=>id.startsWith('block-')));assert(r.toolOptions.some(id=>!id.startsWith('block-')));
+  const saved=JSON.stringify(g.lite),h=make();h.phase=g.phase;h.lite=JSON.parse(saved);h.litePrepareReward();assert.equal(JSON.stringify(h.lite),saved);
+  const id=r.toolOptions[0],before=g.lite.tools[id];assert.equal(g.liteNext(),false);assert.equal(g.liteChooseTool(id),true);assert.equal(g.liteChooseTool(id),false);assert.equal(g.lite.tools[id],before+1);assert.equal(g.liteNext(),true);assert.equal(g.stage,1);assert.equal(g.lite.tools[id],before+1);
  }
 });
 test('choice refresh allows free once then three timed ads, rejects early/double claims and resumes saves',()=>{
@@ -707,7 +707,7 @@ test('coin block stays where it lands and pays each coin cell for the whole clea
 test('coin reward covers blast and excludes shovel or pack consumption',()=>{
  const g=make();g.board=[{x:5,y:0,type:'L',id:g.id++,liteCoin:true},{x:6,y:0,type:'L',id:g.id++}];
  const event=land(g,'blast');assert.equal(event.scoring.coinReward,3);assert.equal(g.lite.coins,3);
- const h=make();piece(h,[[3,1]],'patch');h.resolvePendingSpecial();assert.equal(h.liteUseTool('shovel'),true);assert.equal(h.lite.coins,0);
+ const h=make();h.liteGrantTool('shovel');piece(h,[[3,1]],'patch');h.resolvePendingSpecial();assert.equal(h.liteUseTool('shovel'),true);assert.equal(h.lite.coins,0);
  const k=make();const cells=piece(k,[[0,1]],'pack');cells[0].liteCoin=true;k.resolvePendingSpecial();assert.equal(k.lite.coins,0);
 });
 test('pack consumes its own piece and uses the original reference central repack with preserved colours and IDs',()=>{
@@ -744,11 +744,11 @@ test('heavy drops each cell independently without losing a life, then starts the
  assert.equal(g.lives,3);assert.equal(g.dropsUsed,1);assert.equal(g.phase,'rotating');
  assert.equal(g.events.filter(e=>e.heavyDrop).length,2);assert.equal(g.events.filter(e=>e.kind==='turn').length,1);
 });
-test('heavy block lands into position and eliminates up to 6 rows downwards per occupied column, self-eliminating to avoid hanging',()=>{
+test('heavy block lands into position and eliminates up to 6 rows downwards per occupied column, self-eliminating to avoid hanging and compacting remaining blocks',()=>{
  const g=make();
  for(let y=1;y>=-6;y--){g.board.push({x:2,y,id:g.id++,type:'L'});}
  g.active={type:'I',shape:[[0,0]],x:2,y:5,liteEffect:'heavy',color:'I'};
- g.liteLockHeavy();
+ g.liteLockHeavy(true);
  const specialEvent=g.events.find(e=>e.kind==='special'&&e.liteEffect==='heavy');
  assert(specialEvent);
  assert.equal(specialEvent.cells[0].x,2);
@@ -757,6 +757,11 @@ test('heavy block lands into position and eliminates up to 6 rows downwards per 
  assert(specialEvent.scoring.points>0);
  assert.equal(g.board.length,2,'8 initial blocks - 6 removed = 2 blocks remaining, heavy block not left hanging');
  assert(!g.board.some(c=>c.x===2&&c.y===2),'heavy block cell is not on board');
+ const compactEvent=g.events.find(e=>e.kind==='compact');
+ assert(compactEvent,'compact event should be recorded');
+ assert(compactEvent.steps.length>0,'remaining blocks should compact inwards');
+ const remainingDistances=g.board.map(c=>Math.abs(c.x)+Math.abs(c.y));
+ assert(remainingDistances.every(d=>d < (2+6)),'blocks should have moved closer to center');
 });
 test('spread grows sequentially clockwise when center of gravity is to the right, and counterclockwise when to the left',()=>{
  const gRight=make();gRight.board=[{x:3,y:0,id:gRight.id++,type:'L'}];
@@ -862,45 +867,43 @@ test('a resumed run comes back to the outline it was left on',()=>{
 });
 
 test('tools and special blocks unlock progressively across stages in shop, drops, swap and rewards',()=>{
- // Stage 0 (第1关): only T1 (block-column, block-patch)
+ // Stage 0 (第1关): 6 items (block-column, block-heavy, block-patch, repair, supply, swap)
  const g0=make();assert.equal(g0.stage,0);
  const unlocked0=g0.liteUnlockedTools();
- assert.deepEqual(Array.from(unlocked0.map(t=>t.id)).sort(),['block-column','block-patch'].sort());
+ assert.deepEqual(Array.from(unlocked0.map(t=>t.id)).sort(),['block-column','block-heavy','block-patch','repair','supply','swap'].sort());
  const r0=complete(g0);
- assert.equal(r0.shopOffers.length,2);
- assert.equal(r0.shopOffers.filter(o=>o.kind==='tool').length,0);
- assert.equal(r0.shopOffers.filter(o=>o.kind==='special').length,2);
- assert.equal(r0.toolOptions.length,2);
+ assert.equal(r0.shopOffers.length,6);
+ assert.equal(r0.shopOffers.filter(o=>o.kind==='tool').length,3);
+ assert.equal(r0.shopOffers.filter(o=>o.kind==='special').length,3);
+ assert.equal(r0.toolOptions.length,3);
  assert(r0.toolOptions.every(id=>unlocked0.some(t=>t.id===id)));
 
- // Stage 2 (第3关): +supply, block-heavy -> 4 items
+ // Stage 2 (第3关): +shovel, block-pack -> 8 items
  const g2=make();g2.stage=2;
  const unlocked2=g2.liteUnlockedTools();
- assert.equal(unlocked2.length,4);
+ assert.equal(unlocked2.length,8);
  const r2=complete(g2);
- assert.equal(r2.shopOffers.length,4);
- assert.equal(r2.shopOffers.filter(o=>o.kind==='tool').length,1);
- assert.equal(r2.shopOffers.filter(o=>o.kind==='special').length,3);
+ assert.equal(r2.shopOffers.length,8);
+ assert.equal(r2.shopOffers.filter(o=>o.kind==='tool').length,4);
+ assert.equal(r2.shopOffers.filter(o=>o.kind==='special').length,4);
  assert.equal(r2.toolOptions.length,3);
  assert(r2.toolOptions.every(id=>unlocked2.some(t=>t.id===id)));
 
- // Stage 3 (第4关): +shovel, block-pack -> 6 items
+ // Stage 3 (第4关): +block-glass -> 9 items
  const g3=make();g3.stage=3;
  const unlocked3=g3.liteUnlockedTools();
- assert.equal(unlocked3.length,6);
+ assert.equal(unlocked3.length,9);
  const r3=complete(g3);
- assert.equal(r3.shopOffers.length,6);
- assert.equal(r3.shopOffers.filter(o=>o.kind==='tool').length,2);
- assert.equal(r3.shopOffers.filter(o=>o.kind==='special').length,4);
+ assert.equal(r3.shopOffers.length,8);
 
- // Stage 4 (第5关): +repair, block-glass -> 8 items
+ // Stage 4 (第5关): +block-diamond -> 10 items
  const g4=make();g4.stage=4;
- assert.equal(g4.liteUnlockedTools().length,8);
+ assert.equal(g4.liteUnlockedTools().length,10);
 
- // Stage 5 (第6关): +swap, block-diamond -> 10 items
+ // Stage 5 (第6关): +dye -> 11 items
  const g5=make();g5.stage=5;
  const unlocked5=g5.liteUnlockedTools();
- assert.equal(unlocked5.length,10);
+ assert.equal(unlocked5.length,11);
  for(let i=0;i<10;i++){
   g5.lite.tools.swap=1;g5.phase='play';g5.active={type:'T',color:'T'};
   g5.liteUseTool('swap');
@@ -915,63 +918,63 @@ test('tools and special blocks unlock progressively across stages in shop, drops
 });
 
 test('unseen shop tools track unlocks, trigger badge, and persist once seen',()=>{
- // Stage 0: default 2 items are already seen, no unseen tools
+ // Stage 0: default 6 items are already seen, no unseen tools
  const g=make();
  assert.equal(g.stage,0);
- assert.deepEqual(Array.from(g.lite.seenShopTools).sort(),['block-column','block-patch'].sort());
+ assert.deepEqual(Array.from(g.lite.seenShopTools).sort(),['block-column','block-heavy','block-patch','repair','supply','swap'].sort());
  assert.equal(g.liteUnseenShopTools().length,0);
 
- // Advance to Stage 1: still only block-column and block-patch
+ // Advance to Stage 1: still the same 6 items
  g.stage=1;
  assert.equal(g.liteUnseenShopTools().length,0);
 
- // Advance to Stage 2: supply, block-heavy are unlocked and unseen
+ // Advance to Stage 2: shovel, block-pack are unlocked and unseen
  g.stage=2;
  const unseen2=g.liteUnseenShopTools();
  assert.equal(unseen2.length,2);
- assert.deepEqual(Array.from(unseen2.map(t=>t.id)).sort(),['block-heavy','supply'].sort());
+ assert.deepEqual(Array.from(unseen2.map(t=>t.id)).sort(),['block-pack','shovel'].sort());
 
  // Mark unseen as seen
  const marked2=g.liteMarkShopToolsSeen(unseen2.map(t=>t.id));
  assert.equal(marked2.length,2);
  assert.equal(g.liteUnseenShopTools().length,0);
 
- // Advance to Stage 3: shovel, block-pack unlocked and unseen
- g.stage=3;
- const unseen3=g.liteUnseenShopTools();
- assert.equal(unseen3.length,2);
- assert.deepEqual(Array.from(unseen3.map(t=>t.id)).sort(),['block-pack','shovel'].sort());
-
  // Save and restore preserves seenShopTools
  const saved=JSON.parse(JSON.stringify(g));
  const restored=make();
  Object.assign(restored,saved);
  restored.liteEnsureExpansion();
- assert.equal(restored.liteUnseenShopTools().length,2);
+ assert.equal(restored.liteUnseenShopTools().length,0);
+
+ // Advance to Stage 3: block-glass unlocked and unseen
+ restored.stage=3;
+ const unseen3=restored.liteUnseenShopTools();
+ assert.equal(unseen3.length,1);
+ assert.deepEqual(Array.from(unseen3.map(t=>t.id)).sort(),['block-glass'].sort());
  restored.liteMarkShopToolsSeen();
  assert.equal(restored.liteUnseenShopTools().length,0);
 
- // Advance to Stage 4: repair, block-glass unlocked and unseen
+ // Advance to Stage 4: block-diamond unlocked and unseen
  restored.stage=4;
  const unseen4=restored.liteUnseenShopTools();
- assert.equal(unseen4.length,2);
- assert.deepEqual(Array.from(unseen4.map(t=>t.id)).sort(),['block-glass','repair'].sort());
+ assert.equal(unseen4.length,1);
+ assert.deepEqual(Array.from(unseen4.map(t=>t.id)).sort(),['block-diamond'].sort());
  restored.liteMarkShopToolsSeen();
  assert.equal(restored.liteUnseenShopTools().length,0);
 
- // Advance to Stage 5: swap, block-diamond unlocked and unseen
+ // Advance to Stage 5: dye unlocked and unseen
  restored.stage=5;
  const unseen5=restored.liteUnseenShopTools();
- assert.equal(unseen5.length,2);
- assert.deepEqual(Array.from(unseen5.map(t=>t.id)).sort(),['block-diamond','swap'].sort());
+ assert.equal(unseen5.length,1);
+ assert.deepEqual(Array.from(unseen5.map(t=>t.id)).sort(),['dye'].sort());
  restored.liteMarkShopToolsSeen();
  assert.equal(restored.liteUnseenShopTools().length,0);
 
- // Advance to Stage 6: dye, block-blast unlocked and unseen
+ // Advance to Stage 6: block-blast unlocked and unseen
  restored.stage=6;
  const unseen6=restored.liteUnseenShopTools();
- assert.equal(unseen6.length,2);
- assert.deepEqual(Array.from(unseen6.map(t=>t.id)).sort(),['block-blast','dye'].sort());
+ assert.equal(unseen6.length,1);
+ assert.deepEqual(Array.from(unseen6.map(t=>t.id)).sort(),['block-blast'].sort());
  restored.liteMarkShopToolsSeen();
  assert.equal(restored.liteUnseenShopTools().length,0);
 

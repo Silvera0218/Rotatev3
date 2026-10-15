@@ -21,7 +21,7 @@ const liteIcon = (kind) => {
   return `<svg viewBox="0 0 20 20" aria-hidden="true" shape-rendering="crispEdges"><path fill="currentColor" fill-rule="evenodd" d="${paths[kind]||paths.buff}"/></svg>`;
 };
 const toolbar = document.createElement('div');toolbar.id='lite-toolbar';
-toolbar.innerHTML=`<div class="lite-wallet">${liteIcon('coin')}<b id="lite-coins">0</b><span>金币</span></div><div class="lite-run-score"><small>本局得分</small><b id="lite-score">0</b></div><button id="lite-shovel" type="button">${liteIcon('shovel')}<span>蔓延</span><b>1</b></button><button id="lite-swap" type="button">${liteIcon('swap')}<span>换块</span><b>1</b></button>`;
+toolbar.innerHTML=`<div class="lite-wallet">${liteIcon('coin')}<b id="lite-coins">0</b><span>金币</span></div><div class="lite-run-score"><small>本局得分</small><b id="lite-score">0</b></div><button id="lite-shovel" type="button" hidden>${liteIcon('shovel')}<span>蔓延</span><b>0</b></button><button id="lite-swap" type="button">${liteIcon('swap')}<span>换块</span><b>1</b></button>`;
 I('game-ui').append(toolbar);
 const toolRail=document.createElement('div');toolRail.id='lite-tool-rail';toolRail.setAttribute('role','group');toolRail.setAttribute('aria-label','主动道具');
 for(const {id:kind} of liteConfig.tools){let button=I('lite-'+kind);if(!button){button=document.createElement('button');button.id='lite-'+kind;button.type='button';}button.className='insertion-button';button.innerHTML=`<span class="insertion-glyph">${liteIcon(kind)}</span><b class="insertion-price">0</b><span class="insertion-name">${liteToolName(kind)}</span>`;toolRail.append(button);}
