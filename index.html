@@ -6115,13 +6115,13 @@ globalThis.ROTATION_LITE_LEVEL_DATA = {
   'use strict';
   const BUFFS = [];
   const SPECIALS = [
-    {id:'column',unlockStage:0,name:'变色方块',description:'落地后，将自身所在的整列染成同色'},
-    {id:'patch',unlockStage:0,name:'金币方块',description:'消除时，按本次消除格数获得金币',detail:'落地后保留金币标记。消除时，每个金币格获得等同于本批消除格数的金币；多个金币格分别触发。铲除或重排消耗不发金币。'},
-    {id:'heavy',unlockStage:0,name:'超重方块',description:'落地后按占用列数向下消除整列方块并消除自身，剩余方块向内收缩聚拢',detail:'各格分别独立下落至落位点，按占用列数向下消除该列下方全部方块，自身也一同消除（不造成悬空）；每消除1格使每个消除方块基础分+1（如消除10格则每格基础分+10）；其余方块按向心聚拢规则收缩填补空隙；落空不扣生命。'},
-    {id:'pack',unlockStage:2,name:'强迫症方块',description:'落地后，消耗自身将其余方块向内重排'},
-    {id:'glass',unlockStage:3,name:'玻璃方块',description:'落地后将一侧方块镜像填充至另一侧空格，生成方块变为玻璃方块',detail:'落地后，若位于转轴左侧，将左侧所有方块对称镜像填充至右侧空格（不覆盖对侧已有方块）；若位于右侧则镜像填充至左侧空格。镜像生成方块转化为半透明玻璃方块（原侧方块不变），保留原色并可正常参与消除，且不受以方块颜色为条件的效果影响。4长条形方块若在中心对称掉落，则不触发镜像。'},
-    {id:'diamond',unlockStage:4,name:'钻石方块',description:'同色标记格消除时分数×3',detail:'落地时标记棋盘上全部同色方块；这些格子消除时按基础分的3倍结算。标记会跟随方块移动、旋转和重排。'},
-    {id:'blast',unlockStage:6,name:'爆炸方块',description:'清除全部同色格，每格使本关分数增长3%',detail:'落地后清除全部同色格（含自身），正常计分。额外加分按触发前本关得分×（1.03的消除格数次方−1）计算，整批计算后四舍五入。'}
+    {id:'column',unlockStage:0,basePrice:5,name:'变色方块',description:'落地后，将自身所在的整列染成同色'},
+    {id:'patch',unlockStage:0,basePrice:5,name:'金币方块',description:'消除时，按本次消除格数获得金币',detail:'落地后保留金币标记。消除时，每个金币格获得等同于本批消除格数的金币；多个金币格分别触发。铲除或重排消耗不发金币。'},
+    {id:'heavy',unlockStage:0,basePrice:8,name:'超重方块',description:'落地后按占用列数向下消除整列方块并消除自身，剩余方块向内收缩聚拢',detail:'各格分别独立下落至落位点，按占用列数向下消除该列下方全部方块，自身也一同消除（不造成悬空）；每消除1格使每个消除方块基础分+1（如消除10格则每格基础分+10）；其余方块按向心聚拢规则收缩填补空隙；落空不扣生命。'},
+    {id:'pack',unlockStage:2,basePrice:7,name:'强迫症方块',description:'落地后，消耗自身将其余方块向内重排'},
+    {id:'glass',unlockStage:3,basePrice:8,name:'玻璃方块',description:'落地后将一侧方块镜像填充至另一侧空格，生成方块变为玻璃方块',detail:'落地后，若位于转轴左侧，将左侧所有方块对称镜像填充至右侧空格（不覆盖对侧已有方块）；若位于右侧则镜像填充至左侧空格。镜像生成方块转化为半透明玻璃方块（原侧方块不变），保留原色并可正常参与消除，且不受以方块颜色为条件的效果影响。4长条形方块若在中心对称掉落，则不触发镜像。'},
+    {id:'diamond',unlockStage:4,basePrice:10,name:'钻石方块',description:'同色标记格消除时分数×3',detail:'落地时标记棋盘上全部同色方块；这些格子消除时按基础分的3倍结算。标记会跟随方块移动、旋转和重排。'},
+    {id:'blast',unlockStage:6,basePrice:12,name:'爆炸方块',description:'清除全部同色格，每格使本关分数增长3%',detail:'落地后清除全部同色格（含自身），正常计分。额外加分按触发前本关得分×（1.03的消除格数次方−1）计算，整批计算后四舍五入。'}
   ];
   const BASE_RULES = Object.freeze({
     // The original engine has ten procedural stages, but the lightweight
@@ -6137,12 +6137,12 @@ globalThis.ROTATION_LITE_LEVEL_DATA = {
     colorScoring: Object.freeze({version:'lite-connected-fibonacci-v1',lineMinimum:4,connectedMinimum:5,firstBonus:4,secondBonus:8,recurrenceEnd:10}),
     coinReward: 5, clearCoins: 5, toolPrice:5, shopSlots:8, buffs: BUFFS,
     tools: [
-      { id: 'supply', unlockStage: 0, name: '补给箱', description: '增加本关投放次数。', detail:'使用后增加本关可用投放次数。' },
-      { id: 'repair', unlockStage: 0, name: '生命之心', description: '恢复 1 次落空容错，最多 3 次。' },
-      { id: 'swap', unlockStage: 0, name: '换块', description: '获得一个随机特殊方块。', detail:'优先填入装备槽；装备槽已满时进入暂存背包。' },
-      { id: 'shovel', unlockStage: 2, name: '蔓延', description: '沿当前已摆好的样式向外扩圈。', detail:'在当前已摆好的样式上，检测边界一圈，根据重心偏移方向依次顺时针或逆时针生长新的一圈（最多32格）；60%概率生成当前主导色，40%随机色。' },
-      { id: 'dye', unlockStage: 0, name: '调色瓶', description: '将当前落块染成棋盘上最多的颜色。' },
-      ...SPECIALS.map(block=>({id:'block-'+block.id,unlockStage:block.unlockStage??0,name:block.name,blockEffect:block.id,description:block.description,detail:block.detail}))
+      { id: 'dye', unlockStage: 0, basePrice: 3, name: '调色瓶', description: '将当前落块染成棋盘上最多的颜色。' },
+      { id: 'repair', unlockStage: 0, basePrice: 4, name: '生命之心', description: '恢复 1 次落空容错，最多 3 次。' },
+      { id: 'supply', unlockStage: 0, basePrice: 6, name: '补给箱', description: '增加本关投放次数。', detail:'使用后增加本关可用投放次数。' },
+      { id: 'swap', unlockStage: 0, basePrice: 6, name: '换块', description: '获得一个随机特殊方块。', detail:'优先填入装备槽；装备槽已满时进入暂存背包。' },
+      { id: 'shovel', unlockStage: 2, basePrice: 8, name: '蔓延', description: '沿当前已摆好的样式向外扩圈。', detail:'在当前已摆好的样式上，检测边界一圈，根据重心偏移方向依次顺时针或逆时针生长新的一圈（最多32格）；60%概率生成当前主导色，40%随机色。' },
+      ...SPECIALS.map(block=>({id:'block-'+block.id,unlockStage:block.unlockStage??0,basePrice:block.basePrice??5,name:block.name,blockEffect:block.id,description:block.description,detail:block.detail}))
     ],
     specials: SPECIALS,
     rewardRoutes: [{id:'tool',name:'道具补给'}]
@@ -6308,9 +6308,14 @@ globalThis.ROTATION_LITE_LEVEL_DATA = {
     const denominator=100n**BigInt(count),growth=103n**BigInt(count)-denominator;
     return Number((BigInt(snapshot)*growth*2n+denominator)/(denominator*2n));
   };
+  root.liteToolBasePrice = function (id) {
+    if (!id) return RULES.toolPrice || 5;
+    const tool = RULES.tools.find(t => t.id === id);
+    return tool?.basePrice ?? RULES.toolPrice ?? 5;
+  };
   root.liteStageClearCoins = function (stage = 0, baseCoins = RULES.clearCoins) {
     const s = Math.max(0, stage) + 1;
-    return Math.round(baseCoins * (1 + Math.log(s)));
+    return Math.round(baseCoins * (1 + 3.0 * Math.log(s)));
   };
   const heavyMultiplier=cell=>1+Math.max(0,Number(cell.liteHeavyBonus)||0);
   root.liteScoreConnectedColors = function (cells, result, game) {
@@ -7154,19 +7159,29 @@ globalThis.ROTATION_LITE_LEVEL_DATA = {
       }
       return shuffle(options);
     };
-    const fibonacciPrice = count => {
-      let price=RULES.toolPrice,next=RULES.toolPrice*2;
-      for(let n=0;n<count;n++)[price,next]=[next,price+next];
-      return price;
+    const fibonacciMultiplier = count => {
+      let a = 1, b = 2;
+      for (let n = 0; n < count; n++) [a, b] = [b, a + b];
+      return a;
+    };
+    p.liteToolBasePrice = function (id) {
+      return root.liteToolBasePrice(id);
+    };
+    p.liteToolPriceAtCount = function (id, count = 0) {
+      const base = this.liteToolBasePrice(id);
+      const safeCount = Math.max(0, count);
+      const mult = fibonacciMultiplier(safeCount);
+      const maxCap = Math.max(base * 4, Math.min(60, base * 6));
+      return Math.min(maxCap, base * mult);
     };
     p.liteToolBuyPrice = function (id) {
-      if(!id)return RULES.toolPrice;
-      const purchases=this.lite?.shopPurchases?.[id]||0;
-      return fibonacciPrice(purchases);
+      if(!id) return RULES.toolPrice;
+      const purchases = this.lite?.shopPurchases?.[id] || 0;
+      return this.liteToolPriceAtCount(id, purchases);
     };
     p.liteToolSellPrice = function (id) {
-      const buyPrice=this.liteToolBuyPrice(id);
-      return Math.floor(buyPrice/2);
+      const buyPrice = this.liteToolBuyPrice(id);
+      return Math.floor(buyPrice / 2);
     };
     p.liteCanSellTool = function (id, quantity=1) {
       if(!id||!Number.isInteger(quantity)||quantity<=0)return false;
@@ -7195,7 +7210,7 @@ globalThis.ROTATION_LITE_LEVEL_DATA = {
       const id=offer.kind==='special'?'block-'+offer.item:offer.item;
       const count=this.lite.shopPurchases?.[id]||0;
       let total=0;
-      for(let n=0;n<quantity;n++)total+=fibonacciPrice(count+n);
+      for(let n=0;n<quantity;n++)total+=this.liteToolPriceAtCount(id, count+n);
       return total;
     };
     p.liteCreateShop = function () {

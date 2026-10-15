@@ -504,32 +504,35 @@ test('supply station supports selection before confirmation and changing choice'
  assert.equal(g.lite.tools[opt1],before1+1);assert.equal(g.lite.tools[opt0]||0,before0);
  assert.equal(g.liteChooseTool(opt0),false);
 });
-test('shop repeats purchases with independent Fibonacci prices, keeps choices and persists prices across stages',()=>{
+test('shop repeats purchases with independent tiered prices, keeps choices and persists prices across stages',()=>{
  const g=make();g.stage=6;const r=complete(g);assert.equal(r.shopOffers.length,8);assert.equal(r.shopOffers.filter(o=>o.kind==='tool').length,4);assert.equal(r.shopOffers.filter(o=>o.kind==='special').length,4);assert.equal(new Set(r.shopOffers.map(o=>o.kind+o.item)).size,8);
- // SymPy: 5 * fibonacci(n + 2), n = 0..7.
- const prices=[5,10,15,25,40,65,105,170];
  for(const kind of ['tool','special']){
   const offer=r.shopOffers.find(o=>o.kind===kind),id=kind==='special'?'block-'+offer.item:offer.item,before=g.lite.tools[id];
-  for(const [index,price] of prices.entries()){
+  const expectedPrices=[0,1,2,3,4].map(count=>g.liteToolPriceAtCount(id,count));
+  for(const [index,price] of expectedPrices.entries()){
    assert.equal(g.liteOfferPrice(offer),price);g.lite.coins=price-1;
    const count=g.lite.shopPurchases[id]||0;assert.equal(g.liteBuyOffer(offer.slot),false);assert.equal(g.lite.shopPurchases[id]||0,count);
    g.lite.coins=price;assert.equal(g.liteBuyOffer(offer.slot),true);assert.equal(g.lite.coins,0);assert.equal(g.lite.tools[id],before+index+1);assert.equal(offer.paidPrice,price);
   }
  }
- const untouched=r.shopOffers.find(o=>!g.lite.shopPurchases[o.kind==='special'?'block-'+o.item:o.item]);assert.equal(g.liteOfferPrice(untouched),5);assert.equal(r.settled,false);
+ const untouched=r.shopOffers.find(o=>!g.lite.shopPurchases[o.kind==='special'?'block-'+o.item:o.item]);
+ assert.equal(g.liteOfferPrice(untouched),g.liteToolBasePrice(untouched.kind==='special'?'block-'+untouched.item:untouched.item));assert.equal(r.settled,false);
  const offer=r.shopOffers[0],price=g.liteOfferPrice(offer);const h=make();h.stage=g.stage;h.phase=g.phase;h.lite=JSON.parse(JSON.stringify(g.lite));h.litePrepareReward();assert.equal(h.liteOfferPrice(offer),price);
  assert.equal(h.liteChooseTool(r.toolOptions[0]),true);assert.equal(h.liteBuyOffer(offer.slot),false);assert.equal(h.liteNext(),true);complete(h);
  // Returning stock is priced by item identity, independent of its new slot.
- assert.equal(h.liteOfferPrice({...offer,slot:777}),price);h.reset();assert.equal(h.liteOfferPrice(offer),5);
+ assert.equal(h.liteOfferPrice({...offer,slot:777}),price);h.reset();assert.equal(h.liteOfferPrice(offer),g.liteToolBasePrice(offer.kind==='special'?'block-'+offer.item:offer.item));
 });
 
-test('shop batch purchase sums consecutive Fibonacci prices and grants one item per quantity',()=>{
+test('shop batch purchase sums consecutive tiered prices and grants one item per quantity',()=>{
  const g=make(),r=complete(g),offer=r.shopOffers[0],id=offer.kind==='special'?'block-'+offer.item:offer.item;
- assert.equal(g.liteOfferBatchPrice(offer,3),30);g.lite.coins=30;
+ const p0=g.liteToolPriceAtCount(id,0),p1=g.liteToolPriceAtCount(id,1),p2=g.liteToolPriceAtCount(id,2);
+ const batch3=p0+p1+p2;
+ assert.equal(g.liteOfferBatchPrice(offer,3),batch3);g.lite.coins=batch3;
  const before=g.lite.tools[id]||0;assert.equal(g.liteBuyOffer(offer.slot,3),true);
  assert.equal(g.lite.coins,0);assert.equal(g.lite.tools[id],before+3);assert.equal(g.lite.shopPurchases[id],3);
- assert.equal(offer.paidPrice,30);assert.equal(offer.paidQuantity,3);assert.equal(g.events.at(-1).quantity,3);assert.equal(g.events.at(-1).totalPrice,30);
- assert.equal(g.liteOfferPrice(offer),25);assert.equal(g.liteOfferBatchPrice(offer,2),65);
+ assert.equal(offer.paidPrice,batch3);assert.equal(offer.paidQuantity,3);assert.equal(g.events.at(-1).quantity,3);assert.equal(g.events.at(-1).totalPrice,batch3);
+ const p3=g.liteToolPriceAtCount(id,3),p4=g.liteToolPriceAtCount(id,4);
+ assert.equal(g.liteOfferPrice(offer),p3);assert.equal(g.liteOfferBatchPrice(offer,2),p3+p4);
  const coins=g.lite.coins,owned=g.lite.tools[id];assert.equal(g.liteBuyOffer(offer.slot,2),false);assert.equal(g.lite.coins,coins);assert.equal(g.lite.tools[id],owned);
 });
 
@@ -553,9 +556,10 @@ test('shop purchases can occur across consecutive stages with stage coins and in
 
 test('free rewards and rotor drops do not raise shop prices; old sold stock reopens at its next price',()=>{
  const g=make(),r=complete(g),offer=r.shopOffers[0],id=offer.kind==='special'?'block-'+offer.item:offer.item;
- g.lite.tools[id]+=8;assert.equal(g.liteOfferPrice(offer),5);
- delete g.lite.shopPurchases;offer.sold=true;offer.price=5;g.liteEnsureExpansion();assert.equal(g.liteOfferPrice(offer),10);assert.equal(offer.sold,undefined);
- g.liteEnsureExpansion();assert.equal(g.liteOfferPrice(offer),10);g.lite.coins=10;assert.equal(g.liteBuyOffer(offer.slot),true);assert.equal(g.liteOfferPrice(offer),15);
+ const base=g.liteToolBasePrice(id);
+ g.lite.tools[id]+=8;assert.equal(g.liteOfferPrice(offer),base);
+ delete g.lite.shopPurchases;offer.sold=true;offer.price=base;g.liteEnsureExpansion();assert.equal(g.liteOfferPrice(offer),g.liteToolPriceAtCount(id,1));assert.equal(offer.sold,undefined);
+ g.liteEnsureExpansion();assert.equal(g.liteOfferPrice(offer),g.liteToolPriceAtCount(id,1));g.lite.coins=g.liteToolPriceAtCount(id,1);assert.equal(g.liteBuyOffer(offer.slot),true);assert.equal(g.liteOfferPrice(offer),g.liteToolPriceAtCount(id,2));
 });
 
 test('clear overflow uses half-up rounding and never pays twice after reload or opening choices',()=>{
@@ -1167,16 +1171,16 @@ test('consecutive clear independent multiplier zone S_n = S_n0 * (1 + 5n%)',()=>
 test('clear coins follow logarithmic distribution with base as initial value',()=>{
   const g = make();
   assert.equal(g.liteStageClearCoins(0), 5);  // Stage 1: ln(1) = 0 -> 5
-  assert.equal(g.liteStageClearCoins(1), 8);  // Stage 2: round(5*(1+ln(2))) = 8
-  assert.equal(g.liteStageClearCoins(2), 10); // Stage 3: round(5*(1+ln(3))) = 10
-  assert.equal(g.liteStageClearCoins(4), 13); // Stage 5: round(5*(1+ln(5))) = 13
-  assert.equal(g.liteStageClearCoins(9), 17); // Stage 10: round(5*(1+ln(10))) = 17
+  assert.equal(g.liteStageClearCoins(1), 15); // Stage 2: round(5*(1+3.0*ln(2))) = 15
+  assert.equal(g.liteStageClearCoins(2), 21); // Stage 3: round(5*(1+3.0*ln(3))) = 21
+  assert.equal(g.liteStageClearCoins(4), 29); // Stage 5: round(5*(1+3.0*ln(5))) = 29
+  assert.equal(g.liteStageClearCoins(9), 40); // Stage 10: round(5*(1+3.0*ln(10))) = 40
 
   // Stage 1 reward:
   g.stage = 1;
   g.checkpointScore = g.goal;
   g.completeCheckpoint();
-  assert.equal(g.liteClearCoinReward().base, 8);
+  assert.equal(g.liteClearCoinReward().base, 15);
 });
 test('shop tool selling price is half of current purchase price and updates inventory and coins',()=>{
   const g = make();
@@ -1185,30 +1189,60 @@ test('shop tool selling price is half of current purchase price and updates inve
   g.lite.tools.swap = 3;
   g.lite.coins = 10;
 
-  // Base buy price is 5 -> sell price is floor(5/2) = 2
-  assert.equal(g.liteToolBuyPrice('swap'), 5);
-  assert.equal(g.liteToolSellPrice('swap'), 2);
+  // Swap base buy price is 6 -> sell price is floor(6/2) = 3
+  assert.equal(g.liteToolBuyPrice('swap'), 6);
+  assert.equal(g.liteToolSellPrice('swap'), 3);
 
   // Sell 1 swap
   assert.equal(g.liteSellTool('swap', 1), true);
   assert.equal(g.lite.tools.swap, 2);
-  assert.equal(g.lite.coins, 12);
-  assert.equal(g.events.some(e => e.kind === 'lite-sell' && e.tool === 'swap' && e.totalPrice === 2), true);
+  assert.equal(g.lite.coins, 13);
+  assert.equal(g.events.some(e => e.kind === 'lite-sell' && e.tool === 'swap' && e.totalPrice === 3), true);
 
-  // If purchase count increases buy price to 10 -> sell price becomes 5
+  // If purchase count increases buy price to 12 -> sell price becomes 6
   g.lite.shopPurchases ||= {};
   g.lite.shopPurchases.swap = 1;
-  assert.equal(g.liteToolBuyPrice('swap'), 10);
-  assert.equal(g.liteToolSellPrice('swap'), 5);
+  assert.equal(g.liteToolBuyPrice('swap'), 12);
+  assert.equal(g.liteToolSellPrice('swap'), 6);
 
-  // Sell remaining 2 swaps at 5 each = 10 coins
+  // Sell remaining 2 swaps at 6 each = 12 coins
   assert.equal(g.liteSellTool('swap', 2), true);
   assert.equal(g.lite.tools.swap, 0);
-  assert.equal(g.lite.coins, 22);
+  assert.equal(g.lite.coins, 25);
 
   // Cannot sell when owned is 0
   assert.equal(g.liteCanSellTool('swap', 1), false);
   assert.equal(g.liteSellTool('swap', 1), false);
+});
+
+test('different items have tiered base prices and capped price progression',()=>{
+  const g = make();
+  // Tier 1: Utility & Basic (3 ~ 5)
+  assert.equal(g.liteToolBasePrice('dye'), 3);
+  assert.equal(g.liteToolBasePrice('repair'), 4);
+  assert.equal(g.liteToolBasePrice('block-column'), 5);
+
+  // Tier 2: Tactics & Economy (5 ~ 7)
+  assert.equal(g.liteToolBasePrice('block-patch'), 5);
+  assert.equal(g.liteToolBasePrice('supply'), 6);
+  assert.equal(g.liteToolBasePrice('swap'), 6);
+  assert.equal(g.liteToolBasePrice('block-pack'), 7);
+
+  // Tier 3: Core & High Impact (8 ~ 10)
+  assert.equal(g.liteToolBasePrice('shovel'), 8);
+  assert.equal(g.liteToolBasePrice('block-heavy'), 8);
+  assert.equal(g.liteToolBasePrice('block-glass'), 8);
+  assert.equal(g.liteToolBasePrice('block-diamond'), 10);
+
+  // Tier 4: Ace Win-Condition (12)
+  assert.equal(g.liteToolBasePrice('block-blast'), 12);
+
+  // Ensure price never runs away to hundreds: blast max cap is 60 coins
+  for (let count = 0; count < 15; count++) {
+    assert.equal(g.liteToolPriceAtCount('block-blast', count) <= 60, true);
+    assert.equal(g.liteToolPriceAtCount('block-heavy', count) <= 48, true);
+    assert.equal(g.liteToolPriceAtCount('dye', count) <= 18, true);
+  }
 });
 
 
