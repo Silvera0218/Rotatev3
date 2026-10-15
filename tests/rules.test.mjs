@@ -1215,7 +1215,7 @@ test('shop tool selling price is half of current purchase price and updates inve
   assert.equal(g.liteSellTool('swap', 1), false);
 });
 
-test('different items have tiered base prices and capped price progression',()=>{
+test('different items have tiered base prices and uncapped modified Fibonacci progression',()=>{
   const g = make();
   // Tier 1: Utility & Basic (3 ~ 5)
   assert.equal(g.liteToolBasePrice('dye'), 3);
@@ -1237,11 +1237,27 @@ test('different items have tiered base prices and capped price progression',()=>
   // Tier 4: Ace Win-Condition (12)
   assert.equal(g.liteToolBasePrice('block-blast'), 12);
 
-  // Ensure price never runs away to hundreds: blast max cap is 60 coins
-  for (let count = 0; count < 15; count++) {
-    assert.equal(g.liteToolPriceAtCount('block-blast', count) <= 60, true);
-    assert.equal(g.liteToolPriceAtCount('block-heavy', count) <= 48, true);
-    assert.equal(g.liteToolPriceAtCount('dye', count) <= 18, true);
+  // Early steps follow standard Fibonacci multipliers: 1, 2, 3, 5
+  assert.equal(g.liteToolPriceAtCount('block-blast', 0), 12);
+  assert.equal(g.liteToolPriceAtCount('block-blast', 1), 24);
+  assert.equal(g.liteToolPriceAtCount('block-blast', 2), 36);
+  assert.equal(g.liteToolPriceAtCount('block-blast', 3), 60);
+  assert.equal(g.liteToolPriceAtCount('block-blast', 4), 84);
+  assert.equal(g.liteToolPriceAtCount('block-blast', 5), 120);
+
+  // Dye stays very accessible
+  assert.equal(g.liteToolPriceAtCount('dye', 0), 3);
+  assert.equal(g.liteToolPriceAtCount('dye', 1), 6);
+  assert.equal(g.liteToolPriceAtCount('dye', 2), 9);
+  assert.equal(g.liteToolPriceAtCount('dye', 3), 15);
+  assert.equal(g.liteToolPriceAtCount('dye', 4), 21);
+  assert.equal(g.liteToolPriceAtCount('dye', 5), 30);
+
+  // Strictly increasing and uncapped: every purchase costs more than the last
+  for (let count = 0; count < 20; count++) {
+    assert.equal(g.liteToolPriceAtCount('block-blast', count + 1) > g.liteToolPriceAtCount('block-blast', count), true);
+    assert.equal(g.liteToolPriceAtCount('heavy', count + 1) > g.liteToolPriceAtCount('heavy', count), true);
+    assert.equal(g.liteToolPriceAtCount('dye', count + 1) > g.liteToolPriceAtCount('dye', count), true);
   }
 });
 

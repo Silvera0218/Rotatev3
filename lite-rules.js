@@ -201,6 +201,24 @@
     const tool = RULES.tools.find(t => t.id === id);
     return tool?.basePrice ?? RULES.toolPrice ?? 5;
   };
+  const modifiedFibonacciMultiplier = count => {
+    const table = [1, 2, 3, 5];
+    if (count < table.length) return table[count];
+    let a = table[2], b = table[3];
+    for (let n = 3; n < count; n++) {
+      const next = b + Math.round(a * 0.6);
+      a = b;
+      b = next;
+    }
+    return b;
+  };
+  root.liteModifiedFibonacciMultiplier = modifiedFibonacciMultiplier;
+  root.liteToolPriceAtCount = function (id, count = 0) {
+    const base = root.liteToolBasePrice(id);
+    const safeCount = Math.max(0, count);
+    const mult = modifiedFibonacciMultiplier(safeCount);
+    return base * mult;
+  };
   root.liteStageClearCoins = function (stage = 0, baseCoins = RULES.clearCoins) {
     const s = Math.max(0, stage) + 1;
     return Math.round(baseCoins * (1 + 3.0 * Math.log(s)));
@@ -1047,20 +1065,11 @@
       }
       return shuffle(options);
     };
-    const fibonacciMultiplier = count => {
-      let a = 1, b = 2;
-      for (let n = 0; n < count; n++) [a, b] = [b, a + b];
-      return a;
-    };
     p.liteToolBasePrice = function (id) {
       return root.liteToolBasePrice(id);
     };
     p.liteToolPriceAtCount = function (id, count = 0) {
-      const base = this.liteToolBasePrice(id);
-      const safeCount = Math.max(0, count);
-      const mult = fibonacciMultiplier(safeCount);
-      const maxCap = Math.max(base * 4, Math.min(60, base * 6));
-      return Math.min(maxCap, base * mult);
+      return root.liteToolPriceAtCount(id, count);
     };
     p.liteToolBuyPrice = function (id) {
       if(!id) return RULES.toolPrice;
