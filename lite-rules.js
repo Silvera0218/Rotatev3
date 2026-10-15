@@ -326,10 +326,28 @@
       if(!this.lite.acquiredTools.includes(id)) this.lite.acquiredTools.push(id);
       this.liteInventory();return true;
     };
-    p.liteMoveTool = function (id,target) {
-      const {order}=this.liteInventory(),from=order.indexOf(id);
-      if(from<0||!Number.isInteger(target)||target<0||target>=order.length||target===from)return false;
-      order.splice(from,1);order.splice(target,0,id);this.lite.toolOrder=order;return true;
+    p.liteSwapTool = function (id, target) {
+      const {order} = this.liteInventory();
+      const from = order.indexOf(id);
+      const to = typeof target === 'string' ? order.indexOf(target) : target;
+      if (from < 0 || !Number.isInteger(to) || to < 0 || to >= order.length || to === from) return false;
+      const temp = order[from];
+      order[from] = order[to];
+      order[to] = temp;
+      this.lite.toolOrder = order;
+      return true;
+    };
+    p.liteMoveTool = function (id, target, mode = 'swap') {
+      if (mode === 'insert') {
+        const {order} = this.liteInventory(), from = order.indexOf(id);
+        const to = typeof target === 'string' ? order.indexOf(target) : target;
+        if (from < 0 || !Number.isInteger(to) || to < 0 || to >= order.length || to === from) return false;
+        order.splice(from, 1);
+        order.splice(to, 0, id);
+        this.lite.toolOrder = order;
+        return true;
+      }
+      return this.liteSwapTool(id, target);
     };
     p.liteEnsureExpansion = function () {
       this.lite.buffs=[];

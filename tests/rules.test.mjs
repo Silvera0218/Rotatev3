@@ -54,9 +54,42 @@ test('inventory reorder, saved order and reacquisition keep one position per kin
   assert.deepEqual(Array.from(g.liteInventory().active),['swap','shovel','block-glass']);
   const h=make();h.lite=JSON.parse(JSON.stringify(g.lite));h.liteEnsureExpansion();
   assert.deepEqual(Array.from(h.liteInventory().order),Array.from(g.liteInventory().order));
-  h.liteMoveTool('swap',4);assert.deepEqual(Array.from(h.liteInventory().active),['shovel','block-glass','supply']);
+  h.liteMoveTool('swap',4);assert.deepEqual(Array.from(h.liteInventory().active),['supply','shovel','block-glass']);
   h.liteUseTool('supply');h.liteGrantTool('supply');assert.equal(h.liteInventory().order.at(-1),'supply');
   assert.equal(h.liteMoveTool('repair',-1),false);assert.equal(h.liteMoveTool('unknown',0),false);
+});
+
+test('backpack replacement freely swaps items without sequential downstream shifting',()=>{
+  const g=make();
+  // Initially has swap (active 0)
+  g.liteGrantTool('shovel');   // active 1
+  g.liteGrantTool('repair');   // active 2
+  g.liteGrantTool('dye');      // reserve 3
+  g.liteGrantTool('block-blast'); // reserve 4
+  g.liteGrantTool('block-column'); // reserve 5
+  assert.deepEqual(Array.from(g.liteInventory().active), ['swap', 'shovel', 'repair']);
+  assert.deepEqual(Array.from(g.liteInventory().reserve), ['dye', 'block-blast', 'block-column']);
+
+  // Case 1: Drag reserve item 'dye' (index 3) onto active slot 1 ('shovel')
+  // Should directly replace slot 1 with 'dye', moving 'shovel' to reserve where 'dye' was.
+  // Slot 0 ('swap') and Slot 2 ('repair') MUST remain unchanged! (No sequential shift)
+  assert.equal(g.liteMoveTool('dye', 1), true);
+  assert.deepEqual(Array.from(g.liteInventory().active), ['swap', 'dye', 'repair']);
+  assert.deepEqual(Array.from(g.liteInventory().reserve), ['shovel', 'block-blast', 'block-column']);
+
+  // Case 2: Drag active slot 0 ('swap') onto active slot 2 ('repair')
+  // Should swap slot 0 and slot 2, slot 1 ('dye') MUST remain untouched!
+  assert.equal(g.liteMoveTool('swap', 2), true);
+  assert.deepEqual(Array.from(g.liteInventory().active), ['repair', 'dye', 'swap']);
+
+  // Case 3: Swap using tool ID string directly
+  assert.equal(g.liteSwapTool('block-blast', 'dye'), true);
+  assert.deepEqual(Array.from(g.liteInventory().active), ['repair', 'block-blast', 'swap']);
+  assert.deepEqual(Array.from(g.liteInventory().reserve), ['shovel', 'dye', 'block-column']);
+
+  // Case 4: Legacy insert mode is still supported when explicitly passed
+  assert.equal(g.liteMoveTool('repair', 2, 'insert'), true);
+  assert.deepEqual(Array.from(g.liteInventory().active), ['block-blast', 'swap', 'repair']);
 });
 test('shop and free reward put excess kinds in reserve and preserve them across stages',()=>{
   const g=make();g.liteGrantTool('shovel');g.liteGrantTool('supply');const r=complete(g);g.lite.coins=100;

@@ -14,9 +14,10 @@ html.arcade-ui[data-v3] #stage #v3-backpack-open .insertion-price{background:#c4
 #v3-backpack .backpack-row:active{transform:none}
 .backpack-effect-copy{font:12px/1.6 "Microsoft YaHei",sans-serif;color:#41648f;overflow-wrap:anywhere}
 .backpack-grip{font:22px/1 sans-serif;color:#8aa6cc;pointer-events:none}
-#v3-backpack .backpack-row.is-dragging{opacity:.35;border-style:dashed}
-#v3-backpack .backpack-drop-target{outline:2px solid #88cb1c;outline-offset:1px;background:#efffc4}
-#v3-backpack .backpack-drag-ghost{position:fixed;z-index:10;pointer-events:none;margin:0;opacity:.95;background:#f5fcff;border:2px solid #4b6cff;box-shadow:0 8px 22px #163b6140;cursor:grabbing;transform:rotate(-1deg)}
+#v3-backpack .backpack-row.is-dragging{opacity:.35;border-style:dashed;pointer-events:none}
+#v3-backpack .backpack-row.is-selected{outline:2px solid #3b82f6;outline-offset:1px;background:#e1effe;box-shadow:0 0 0 2px #3b82f6 inset}
+#v3-backpack .backpack-drop-target{outline:2px solid #16a34a!important;outline-offset:1px;background:#dcfce7!important;transform:scale(1.02);transition:transform .12s ease,background .12s ease}
+#v3-backpack .backpack-drag-ghost{position:fixed;z-index:100;pointer-events:none;margin:0;opacity:.96;background:#f5fcff;border:2px solid #3b82f6;box-shadow:0 10px 25px #163b6150;cursor:grabbing;transform:rotate(-1.5deg) scale(1.03)}
 #v3-backpack[data-dragging=true],#v3-backpack[data-dragging=true] *{cursor:grabbing}
 #backpack-active .backpack-row{border-color:#90aeeb;background:#edf4ff}.backpack-art{display:grid;place-items:center;width:40px;height:40px;border:2px solid #6383c9;border-radius:50%;background:#dbefff}.backpack-art img{image-rendering:pixelated;width:28px;height:28px}
 .backpack-copy{display:flex;flex-direction:column;gap:5px;min-width:0}.backpack-copy strong{font:700 13px/1.4 "Microsoft YaHei",sans-serif;overflow-wrap:anywhere}.backpack-copy small{font-size:13px;color:#4967d8}
