@@ -1,8 +1,16 @@
-globalThis.createRotationCodex=function({config,makeGame,entry,onResume,onHome}){
+globalThis.createRotationCodex=function({config,makeGame,game,entry,onResume,onHome}){
   const groups=[{name:'道具',items:config.tools.filter(t=>!t.blockEffect)},{name:'特殊方块',items:config.tools.filter(t=>t.blockEffect)}];
   const icon=id=>'./assets/icons/'+(id==='shovel'?'spread':id)+(id==='shovel'?'.png':'.svg');
+  const isAcquired=itemId=>{
+    if(dialog.dataset.mode!=='pause'||!game)return true;
+    const g=typeof game==='function'?game():game;
+    if(!g||!g.lite)return true;
+    if(Array.isArray(g.lite.acquiredTools)&&g.lite.acquiredTools.includes(itemId))return true;
+    if((g.lite.tools?.[itemId]||0)>0)return true;
+    return false;
+  };
   const dialog=document.createElement('dialog');dialog.id='v3-codex';dialog.setAttribute('aria-labelledby','v3-codex-title');
-  dialog.innerHTML=`<header class="codex-header"><img src="./assets/ui/shopkeeper.png" alt="" width="84" height="84"><div><small>ROTATION / FIELD GUIDE</small><h2 id="v3-codex-title">能力图鉴</h2></div><button type="button" class="codex-close v3-popup-close" aria-label="关闭图鉴" title="关闭"></button><svg class="codex-wave" viewBox="0 0 1000 32" preserveAspectRatio="none" aria-hidden="true"><path fill="#c5ff12" d="M0 5Q250 30 500 12T1000 10V32H0Z"/><path fill="#3e5aff" d="M0 18Q250 40 500 23T1000 20V32H0Z"/></svg></header><div class="codex-body"><nav class="codex-index" aria-label="能力目录"></nav><section class="codex-detail" aria-labelledby="codex-name"><div class="codex-detail-heading"><span id="codex-kind"></span><h3 id="codex-name"></h3></div><div class="codex-screen"><canvas width="640" height="360" role="img" aria-label="能力效果演示"></canvas><span class="codex-demo-label">效果演示</span></div><div class="codex-playback"><span id="codex-step" aria-live="off"></span><button id="codex-replay" type="button">↻ 重播</button></div><p id="codex-description"></p></section></div><footer class="codex-footer">点击图标，查看效果</footer>`;
+  dialog.innerHTML=`<header class="codex-header"><img src="./assets/ui/shopkeeper.png" alt="" width="84" height="84"><div><small>ROTATION / FIELD GUIDE</small><h2 id="v3-codex-title">能力图鉴</h2></div><button type="button" class="codex-close v3-popup-close" aria-label="关闭图鉴" title="关闭"></button><svg class="codex-wave" viewBox="0 0 1000 32" preserveAspectRatio="none" aria-hidden="true"><path fill="#c5ff12" d="M0 5Q250 30 500 12T1000 10V32H0Z"/><path fill="#3e5aff" d="M0 18Q250 40 500 23T1000 20V32H0Z"/></svg></header><div class="codex-body"><nav class="codex-index" aria-label="能力目录"></nav><section class="codex-detail" aria-labelledby="codex-name"><div class="codex-detail-heading"><span id="codex-kind"></span><h3 id="codex-name"></h3></div><div id="codex-unlock-condition" class="codex-unlock-condition" hidden></div><div class="codex-screen"><canvas width="640" height="360" role="img" aria-label="能力效果演示"></canvas><span class="codex-demo-label">效果演示</span></div><div class="codex-playback"><span id="codex-step" aria-live="off"></span><button id="codex-replay" type="button">↻ 重播</button></div><p id="codex-description"></p></section></div><footer class="codex-footer">点击图标，查看效果</footer>`;
   document.body.append(dialog);const get=s=>dialog.querySelector(s),canvas=get('canvas'),ctx=canvas.getContext('2d');
   let selected=null,scenario=null,start=0,frame=0,opener=entry,closeReason='';
   const footer=get('.codex-footer');footer.textContent='';
@@ -10,8 +18,17 @@ globalThis.createRotationCodex=function({config,makeGame,entry,onResume,onHome})
   pauseFooter.innerHTML='<button type="button" id="v3-pause-continue">继续游戏 <span aria-hidden="true">→</span></button><button type="button" id="v3-pause-home">返回主页</button>';
   footer.append(pauseFooter);get('#v3-pause-continue').onclick=()=>close();get('#v3-pause-home').onclick=()=>onHome?.();
   const tabs=document.createElement('div');tabs.className='codex-category-tabs';tabs.hidden=true;tabs.setAttribute('role','tablist');tabs.setAttribute('aria-label','图鉴分类');get('.codex-index').prepend(tabs);
+  function syncItemStates(){
+    const paused=dialog.dataset.mode==='pause';
+    for(const b of dialog.querySelectorAll('.codex-item')){
+      const id=b.dataset.entry;
+      const unacquired=paused&&!isAcquired(id);
+      b.dataset.unacquired=String(unacquired);
+      b.classList.toggle('codex-unacquired',unacquired);
+    }
+  }
   groups.forEach((group,index)=>{const button=document.createElement('button');button.type='button';button.textContent=group.name;button.setAttribute('role','tab');button.id='codex-tab-'+index;button.setAttribute('aria-controls','codex-group-'+index);button.onclick=()=>{select(group.items[0],group.name);syncCategory(group.name);};tabs.append(button);});
-  function syncCategory(name){groups.forEach((group,index)=>{const active=group.name===name;tabs.children[index].setAttribute('aria-selected',String(active));tabs.children[index].tabIndex=active?0:-1;get('#codex-group-'+index).hidden=dialog.dataset.mode==='pause'&&!active;});}
+  function syncCategory(name){groups.forEach((group,index)=>{const active=group.name===name;tabs.children[index].setAttribute('aria-selected',String(active));tabs.children[index].tabIndex=active?0:-1;get('#codex-group-'+index).hidden=dialog.dataset.mode==='pause'&&!active;});syncItemStates();}
   tabs.addEventListener('keydown',event=>{if(!['ArrowLeft','ArrowRight'].includes(event.key))return;event.preventDefault();const buttons=[...tabs.children],index=buttons.indexOf(document.activeElement),next=buttons[(index+(event.key==='ArrowRight'?1:buttons.length-1))%buttons.length];next.click();next.focus();});
   const images=new Map();for(const g of groups)for(const item of g.items){const img=new Image();img.src=icon(item.id);images.set(item.id,img);}
   const clone=cells=>cells.map(c=>({...c}));
@@ -67,13 +84,34 @@ globalThis.createRotationCodex=function({config,makeGame,entry,onResume,onHome})
     canvas.dataset.demoPhase=phase<1700?'before':phase<2600?'effect':'after';
   }
   function loop(now){if(!dialog.open)return;paint(now-start);frame=requestAnimationFrame(loop);}
-  function select(item,group){selected=item;scenario=preview(item);dialog.dataset.selected=item.id;get('#codex-name').textContent=item.name;get('#codex-kind').textContent=group;get('#codex-description').textContent=item.detail||item.description;canvas.setAttribute('aria-label',item.name+'：'+(item.detail||item.description));for(const b of dialog.querySelectorAll('[data-entry]'))b.setAttribute('aria-pressed',String(b.dataset.entry===item.id));start=performance.now();paint(reduced.matches?3000:0);}
+  function select(item,group){
+    selected=item;scenario=preview(item);dialog.dataset.selected=item.id;
+    get('#codex-name').textContent=item.name;get('#codex-kind').textContent=group;
+    get('#codex-description').textContent=item.detail||item.description;
+    const unlockEl=get('#codex-unlock-condition');
+    const paused=dialog.dataset.mode==='pause';
+    const unacquired=paused&&!isAcquired(item.id);
+    if(unlockEl){
+      if(unacquired){
+        const stage=item.unlockStage??0;
+        const stageText=stage===0?'初始解锁（第 1 关起投放）':`第 ${stage+1} 关解锁`;
+        unlockEl.textContent=`🔒 解锁条件：${stageText}（本局尚未获得）`;
+        unlockEl.hidden=false;
+      }else{
+        unlockEl.textContent='';
+        unlockEl.hidden=true;
+      }
+    }
+    canvas.setAttribute('aria-label',item.name+'：'+(item.detail||item.description));
+    for(const b of dialog.querySelectorAll('[data-entry]'))b.setAttribute('aria-pressed',String(b.dataset.entry===item.id));
+    start=performance.now();paint(reduced.matches?3000:0);
+  }
   for(const group of groups){const section=document.createElement('section');section.className='codex-group';const h=document.createElement('h3');h.textContent=group.name;section.append(h);const row=document.createElement('div');row.className='codex-icons';for(const item of group.items){const b=document.createElement('button');b.type='button';b.className='codex-item';b.dataset.entry=item.id;b.setAttribute('aria-label',item.name);b.innerHTML='<span class="codex-medallion"><img src="'+icon(item.id)+'" width="34" height="34" alt=""></span><span class="codex-item-name"></span>';b.querySelector('.codex-item-name').textContent=item.name.replace('方块','');b.onclick=()=>select(item,group.name);row.append(b);}section.append(row);get('.codex-index').append(section);}
   get('.codex-index').querySelectorAll('.codex-group').forEach((section,index)=>{section.id='codex-group-'+index;section.setAttribute('aria-labelledby','codex-tab-'+index);});
   function close(reason=''){if(dialog.dataset.v3Closing==='true')return;closeReason=reason;dialog.close();}
   get('.codex-close').onclick=()=>close();dialog.addEventListener('close',()=>{cancelAnimationFrame(frame);if(dialog.dataset.mode==='pause'&&!closeReason)onResume?.();else if(closeReason!=='home')opener.focus({preventScroll:true});closeReason='';});dialog.addEventListener('keydown',e=>e.stopPropagation());
   const reduced=matchMedia('(prefers-reduced-motion: reduce)');get('#codex-replay').onclick=()=>{start=performance.now();paint(reduced.matches?3000:0);};
-  entry.textContent='图鉴';entry.setAttribute('aria-haspopup','dialog');function open(origin=entry,{mode='catalogue'}={}){opener=origin;closeReason='';dialog.dataset.mode=mode;const paused=mode==='pause';tabs.hidden=!paused;pauseFooter.hidden=!paused;get('#v3-codex-title').textContent=paused?'已暂停':'能力图鉴';get('.codex-close').setAttribute('aria-label',paused?'继续游戏':'关闭图鉴');dialog.showModal();const group=selected?groups.find(g=>g.items.includes(selected)).name:'道具';select(selected||groups[0].items[0],group);syncCategory(group);if(!reduced.matches){cancelAnimationFrame(frame);frame=requestAnimationFrame(loop);}(paused?get('#v3-pause-continue'):get('.codex-close')).focus({preventScroll:true});}
+  entry.textContent='图鉴';entry.setAttribute('aria-haspopup','dialog');function open(origin=entry,{mode='catalogue'}={}){opener=origin;closeReason='';dialog.dataset.mode=mode;const paused=mode==='pause';tabs.hidden=!paused;pauseFooter.hidden=!paused;get('#v3-codex-title').textContent=paused?'已暂停':'能力图鉴';get('.codex-close').setAttribute('aria-label',paused?'继续游戏':'关闭图鉴');dialog.showModal();syncItemStates();const group=selected?groups.find(g=>g.items.includes(selected)).name:'道具';select(selected||groups[0].items[0],group);syncCategory(group);if(!reduced.matches){cancelAnimationFrame(frame);frame=requestAnimationFrame(loop);}(paused?get('#v3-pause-continue'):get('.codex-close')).focus({preventScroll:true});}
   entry.onclick=()=>open(entry);
   document.addEventListener('visibilitychange',()=>{if(document.hidden)cancelAnimationFrame(frame);else if(dialog.open&&!reduced.matches){start=performance.now();frame=requestAnimationFrame(loop);}});
   installRotationPopupMotion(dialog);

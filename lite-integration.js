@@ -673,7 +673,7 @@ Gf=function(){
   liteSync();
 };
 // Catalogue previews run on throwaway models and never touch the live save.
-const rotationCodex=createRotationCodex({config:liteConfig,makeGame:()=>new e9(42),entry:I('home-library-open'),onResume:()=>{se.unlock();$9();},onHome:()=>I('return-home').click()});
+const rotationCodex=createRotationCodex({config:liteConfig,makeGame:()=>new e9(42),game:()=>L,entry:I('home-library-open'),onResume:()=>{se.unlock();$9();},onHome:()=>I('return-home').click()});
 Fa=function(){_t();G0=true;se.pause();I('overlay').dataset.pause='true';I('stage').classList.add('pause-active');I('game-ui').inert=true;I('game-ui').setAttribute('aria-hidden','true');rotationCodex.open(I('pause'),{mode:'pause'});};
 I('exit-dialog').addEventListener('close',()=>{if(rotationCodex.dialog.open)I('v3-pause-home').focus({preventScroll:true});});
 const rotationBackpack=createRotationBackpack({rail:toolRail,config:liteConfig,game:()=>L,canOpen:liteCanAct,pause:()=>{const previous=G0;G0=true;_t();se.pause();return previous;},resume:previous=>{G0=previous;u3=performance.now();_t();if(!previous)se.unlock();liteSync();liteSaveSafe();},changed:()=>{liteSync();liteSaveSafe();}});

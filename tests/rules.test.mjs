@@ -621,16 +621,16 @@ test('blast clears every same-colour cell, adds compound snapshot bonus, and pay
  const g=make();g.stage=8;g.outline=null;g.checkpointScore=100;g.levelScore=100;g.score=500;
  g.board=[{x:4,y:0,id:g.id++,type:'L',liteHeavyBonus:12,liteCoin:true},{x:-1,y:0,id:g.id++,type:'L'},{x:1,y:0,id:g.id++,type:'T'}];
  const event=land(g,'blast');assert.equal(event.removed.length,3);assert(event.removed.every(c=>c.type==='L'));
- assert.equal(event.scoring.points,20);assert.equal(event.scoring.blastBonus,5);assert.equal(event.scoring.coinReward,3);
- assert.equal(g.lite.coins,3);assert.equal(g.score,520);assert.equal(g.checkpointScore,120);assert.equal(g.totalCleared,3);assert(g.board.every(c=>c.type==='T'));
- assert.equal(g.resolvePendingSpecial(),null);assert.equal(g.score,520);assert.equal(g.lite.coins,3);
+ assert.equal(event.scoring.points,24);assert.equal(event.scoring.blastBonus,9);assert.equal(event.scoring.coinReward,3);
+ assert.equal(g.lite.coins,3);assert.equal(g.score,524);assert.equal(g.checkpointScore,124);assert.equal(g.totalCleared,3);assert(g.board.every(c=>c.type==='T'));
+ assert.equal(g.resolvePendingSpecial(),null);assert.equal(g.score,524);assert.equal(g.lite.coins,3);
 });
 test('blast compounds from one snapshot and rounds only once including exact halves',()=>{
- // SymPy: floor(S*((1015/1000)**N-1)+1/2), independently verified.
- for(const [score,count,expected] of [[100,3,5],[45,3,2],[1000,10,161],[50,1,1],[5000,2,151],[0,10,0]])assert.equal(ctx.liteBlastBonus(score,count),expected);
+ // SymPy: floor(S*((103/100)**N-1)+1/2), independently verified.
+ for(const [score,count,expected] of [[100,3,9],[45,3,4],[1000,10,344],[50,1,2],[5000,2,305],[0,10,0]])assert.equal(ctx.liteBlastBonus(score,count),expected);
  const g=make();g.checkpointScore=1000;g.levelScore=1000;g.score=1000;g.board=Array.from({length:9},(_,i)=>({x:i+1,y:0,id:g.id++,type:'L'}));
  const expected=make().awardCells([...g.board,{x:0,y:1,type:'L',id:99}],'tool').points;
- const event=land(g,'blast');assert.equal(event.scoring.points,expected+161);assert.equal(g.checkpointScore,1000+expected+161);
+ const event=land(g,'blast');assert.equal(event.scoring.points,expected+344);assert.equal(g.checkpointScore,1000+expected+344);
 });
 test('glass block mirrors landing side blocks to the opposite side and only generated blocks become glass blocks',()=>{
  const g=make();
@@ -744,24 +744,27 @@ test('heavy drops each cell independently without losing a life, then starts the
  assert.equal(g.lives,3);assert.equal(g.dropsUsed,1);assert.equal(g.phase,'rotating');
  assert.equal(g.events.filter(e=>e.heavyDrop).length,2);assert.equal(g.events.filter(e=>e.kind==='turn').length,1);
 });
-test('heavy block lands into position and eliminates up to 6 rows downwards per occupied column, self-eliminating to avoid hanging and compacting remaining blocks',()=>{
+test('heavy block lands into position and eliminates downwards per occupied column, self-eliminating to avoid hanging, compacting remaining blocks and awarding extra base score per removed block',()=>{
  const g=make();
  for(let y=1;y>=-6;y--){g.board.push({x:2,y,id:g.id++,type:'L'});}
+ g.board.push({x:4,y:0,id:g.id++,type:'T'});
  g.active={type:'I',shape:[[0,0]],x:2,y:5,liteEffect:'heavy',color:'I'};
  g.liteLockHeavy(true);
  const specialEvent=g.events.find(e=>e.kind==='special'&&e.liteEffect==='heavy');
  assert(specialEvent);
  assert.equal(specialEvent.cells[0].x,2);
  assert.equal(specialEvent.cells[0].y,2,'heavy cell should land at y = 2');
- assert.equal(specialEvent.removed.length,7,'should eliminate 6 blocks downwards plus the heavy block itself');
- assert(specialEvent.scoring.points>0);
- assert.equal(g.board.length,2,'8 initial blocks - 6 removed = 2 blocks remaining, heavy block not left hanging');
- assert(!g.board.some(c=>c.x===2&&c.y===2),'heavy block cell is not on board');
+ assert.equal(specialEvent.removed.length,9,'should eliminate all 8 blocks downwards plus the heavy block itself');
+ assert.equal(specialEvent.scoring.heavyBonus,81,'9 removed cells * 9 extra base points = 81');
+ assert.equal(specialEvent.scoring.heavyBonusPerCell,9);
+ assert.equal(g.board.length,1,'all 8 blocks in column 2 removed, remaining column 4 block kept');
+ assert(!g.board.some(c=>c.x===2),'no blocks remain in column 2');
  const compactEvent=g.events.find(e=>e.kind==='compact');
  assert(compactEvent,'compact event should be recorded');
  assert(compactEvent.steps.length>0,'remaining blocks should compact inwards');
  const remainingDistances=g.board.map(c=>Math.abs(c.x)+Math.abs(c.y));
- assert(remainingDistances.every(d=>d < (2+6)),'blocks should have moved closer to center');
+ assert(remainingDistances.every(d=>d < 4),'blocks should have moved closer to center');
+ assert(g.lite.acquiredTools.includes('block-heavy'));
 });
 test('spread grows sequentially clockwise when center of gravity is to the right, and counterclockwise when to the left',()=>{
  const gRight=make();gRight.board=[{x:3,y:0,id:gRight.id++,type:'L'}];
@@ -870,10 +873,10 @@ test('tools and special blocks unlock progressively across stages in shop, drops
  // Stage 0 (第1关): 6 items (block-column, block-heavy, block-patch, repair, supply, swap)
  const g0=make();assert.equal(g0.stage,0);
  const unlocked0=g0.liteUnlockedTools();
- assert.deepEqual(Array.from(unlocked0.map(t=>t.id)).sort(),['block-column','block-heavy','block-patch','repair','supply','swap'].sort());
+ assert.deepEqual(Array.from(unlocked0.map(t=>t.id)).sort(),['block-column','block-heavy','block-patch','dye','repair','supply','swap'].sort());
  const r0=complete(g0);
- assert.equal(r0.shopOffers.length,6);
- assert.equal(r0.shopOffers.filter(o=>o.kind==='tool').length,3);
+ assert.equal(r0.shopOffers.length,7);
+ assert.equal(r0.shopOffers.filter(o=>o.kind==='tool').length,4);
  assert.equal(r0.shopOffers.filter(o=>o.kind==='special').length,3);
  assert.equal(r0.toolOptions.length,3);
  assert(r0.toolOptions.every(id=>unlocked0.some(t=>t.id===id)));
@@ -881,7 +884,7 @@ test('tools and special blocks unlock progressively across stages in shop, drops
  // Stage 2 (第3关): +shovel, block-pack -> 8 items
  const g2=make();g2.stage=2;
  const unlocked2=g2.liteUnlockedTools();
- assert.equal(unlocked2.length,8);
+ assert.equal(unlocked2.length,9);
  const r2=complete(g2);
  assert.equal(r2.shopOffers.length,8);
  assert.equal(r2.shopOffers.filter(o=>o.kind==='tool').length,4);
@@ -892,13 +895,13 @@ test('tools and special blocks unlock progressively across stages in shop, drops
  // Stage 3 (第4关): +block-glass -> 9 items
  const g3=make();g3.stage=3;
  const unlocked3=g3.liteUnlockedTools();
- assert.equal(unlocked3.length,9);
+ assert.equal(unlocked3.length,10);
  const r3=complete(g3);
  assert.equal(r3.shopOffers.length,8);
 
  // Stage 4 (第5关): +block-diamond -> 10 items
  const g4=make();g4.stage=4;
- assert.equal(g4.liteUnlockedTools().length,10);
+ assert.equal(g4.liteUnlockedTools().length,11);
 
  // Stage 5 (第6关): +dye -> 11 items
  const g5=make();g5.stage=5;
@@ -921,7 +924,7 @@ test('unseen shop tools track unlocks, trigger badge, and persist once seen',()=
  // Stage 0: default 6 items are already seen, no unseen tools
  const g=make();
  assert.equal(g.stage,0);
- assert.deepEqual(Array.from(g.lite.seenShopTools).sort(),['block-column','block-heavy','block-patch','repair','supply','swap'].sort());
+ assert.deepEqual(Array.from(g.lite.seenShopTools).sort(),['block-column','block-heavy','block-patch','dye','repair','supply','swap'].sort());
  assert.equal(g.liteUnseenShopTools().length,0);
 
  // Advance to Stage 1: still the same 6 items
@@ -962,15 +965,11 @@ test('unseen shop tools track unlocks, trigger badge, and persist once seen',()=
  restored.liteMarkShopToolsSeen();
  assert.equal(restored.liteUnseenShopTools().length,0);
 
- // Advance to Stage 5: dye unlocked and unseen
- restored.stage=5;
- const unseen5=restored.liteUnseenShopTools();
- assert.equal(unseen5.length,1);
- assert.deepEqual(Array.from(unseen5.map(t=>t.id)).sort(),['dye'].sort());
- restored.liteMarkShopToolsSeen();
- assert.equal(restored.liteUnseenShopTools().length,0);
+ // Advance to Stage 5: no new tools at stage 5 now that dye is stage 0
+  restored.stage=5;
+  assert.equal(restored.liteUnseenShopTools().length,0);
 
- // Advance to Stage 6: block-blast unlocked and unseen
+  // Advance to Stage 6: block-blast unlocked and unseen
  restored.stage=6;
  const unseen6=restored.liteUnseenShopTools();
  assert.equal(unseen6.length,1);
@@ -983,15 +982,15 @@ test('unseen shop tools track unlocks, trigger badge, and persist once seen',()=
  assert.equal(restored.liteUnseenShopTools().length,0);
 });
 
-test('shovel tool spreads outward ring up to 24 cells, respecting dominant color bias',()=>{
+test('shovel tool spreads outward ring up to 32 cells, respecting dominant color bias',()=>{
  const g=make();
  g.board=[{x:0,y:1,type:'T',id:g.id++},{x:1,y:1,type:'T',id:g.id++},{x:0,y:2,type:'T',id:g.id++}];
  g.liteGrantTool('shovel',1);
  assert.equal(g.liteUseTool('shovel'),true);
  const event=g.events.find(e=>e.kind==='lite-tool'&&e.tool==='shovel');
  assert(event);
- assert(event.amount <= 24);
- assert(event.spreadCells.length <= 24);
+ assert(event.amount <= 32);
+ assert(event.spreadCells.length <= 32);
  assert(['cw','ccw'].includes(event.direction));
  assert.equal(g.liteDyeColor(),'T');
 });
@@ -1112,5 +1111,21 @@ test('liteBlockFx and special layers support coin blocks with polygonOffset and 
   const snapshot = fx.snapshot();
   assert.equal(snapshot.patch.count, 1);
 });
+test('acquiredTools tracks game tools acquisition across start, grants, inventory and attachments',()=>{
+  const g = make();
+  assert.deepEqual(Array.from(g.lite.acquiredTools), ['swap']);
+  
+  g.liteGrantTool('shovel', 1);
+  assert(g.lite.acquiredTools.includes('shovel'));
+  assert(!g.lite.acquiredTools.includes('block-glass'));
 
+  // Place a glass block: after attach records it in acquiredTools
+  g.liteAfterAttach([{ x: -1, y: 1, type: 'L', liteEffect: 'glass', id: g.id++ }]);
+  assert(g.lite.acquiredTools.includes('block-glass'));
 
+  // Ensure expansion maintains acquiredTools from non-zero tools
+  const h = make();
+  h.lite.tools['block-pack'] = 1;
+  h.liteEnsureExpansion();
+  assert(h.lite.acquiredTools.includes('block-pack'));
+});

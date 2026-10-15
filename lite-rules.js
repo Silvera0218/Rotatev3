@@ -5,11 +5,11 @@
   const SPECIALS = [
     {id:'column',unlockStage:0,name:'变色方块',description:'落地后，将自身所在的整列染成同色'},
     {id:'patch',unlockStage:0,name:'金币方块',description:'消除时，按本次消除格数获得金币',detail:'落地后保留金币标记。消除时，每个金币格获得等同于本批消除格数的金币；多个金币格分别触发。铲除或重排消耗不发金币。'},
-    {id:'heavy',unlockStage:0,name:'超重方块',description:'落地后按占用列数向下最多消除6行方块并消除自身，剩余方块向内收缩聚拢',detail:'各格分别独立下落至落位点，按占用列数向下最多消除6行方块，自身也一同消除（不造成悬空）；其余方块按向心聚拢规则收缩填补空隙；落空不扣生命。'},
+    {id:'heavy',unlockStage:0,name:'超重方块',description:'落地后按占用列数向下消除整列方块并消除自身，剩余方块向内收缩聚拢',detail:'各格分别独立下落至落位点，按占用列数向下消除该列下方全部方块，自身也一同消除（不造成悬空）；每消除1格使每个消除方块基础分+1（如消除10格则每格基础分+10）；其余方块按向心聚拢规则收缩填补空隙；落空不扣生命。'},
     {id:'pack',unlockStage:2,name:'强迫症方块',description:'落地后，消耗自身将其余方块向内重排'},
     {id:'glass',unlockStage:3,name:'玻璃方块',description:'落地后将一侧方块镜像填充至另一侧空格，生成方块变为玻璃方块',detail:'落地后，若位于转轴左侧，将左侧所有方块对称镜像填充至右侧空格（不覆盖对侧已有方块）；若位于右侧则镜像填充至左侧空格。镜像生成方块转化为半透明玻璃方块（原侧方块不变），保留原色并可正常参与消除，且不受以方块颜色为条件的效果影响。4长条形方块若在中心对称掉落，则不触发镜像。'},
     {id:'diamond',unlockStage:4,name:'钻石方块',description:'同色标记格消除时分数×3',detail:'落地时标记棋盘上全部同色方块；这些格子消除时按基础分的3倍结算。标记会跟随方块移动、旋转和重排。'},
-    {id:'blast',unlockStage:6,name:'爆炸方块',description:'清除全部同色格，每格使本关分数增长1.5%',detail:'落地后清除全部同色格（含自身），正常计分。额外加分按触发前本关得分×（1.015的消除格数次方−1）计算，整批计算后四舍五入。'}
+    {id:'blast',unlockStage:6,name:'爆炸方块',description:'清除全部同色格，每格使本关分数增长3%',detail:'落地后清除全部同色格（含自身），正常计分。额外加分按触发前本关得分×（1.03的消除格数次方−1）计算，整批计算后四舍五入。'}
   ];
   const BASE_RULES = Object.freeze({
     // The original engine has ten procedural stages, but the lightweight
@@ -28,8 +28,8 @@
       { id: 'supply', unlockStage: 0, name: '补给箱', description: '增加本关投放次数。', detail:'使用后增加本关可用投放次数。' },
       { id: 'repair', unlockStage: 0, name: '生命之心', description: '恢复 1 次落空容错，最多 3 次。' },
       { id: 'swap', unlockStage: 0, name: '换块', description: '获得一个随机特殊方块。', detail:'优先填入装备槽；装备槽已满时进入暂存背包。' },
-      { id: 'shovel', unlockStage: 2, name: '蔓延', description: '沿当前已摆好的样式向外扩圈。', detail:'在当前已摆好的样式上，检测边界一圈，根据重心偏移方向依次顺时针或逆时针生长新的一圈（最多24格）；60%概率生成当前主导色，40%随机色。' },
-      { id: 'dye', unlockStage: 5, name: '调色瓶', description: '将当前落块染成棋盘上最多的颜色。' },
+      { id: 'shovel', unlockStage: 2, name: '蔓延', description: '沿当前已摆好的样式向外扩圈。', detail:'在当前已摆好的样式上，检测边界一圈，根据重心偏移方向依次顺时针或逆时针生长新的一圈（最多32格）；60%概率生成当前主导色，40%随机色。' },
+      { id: 'dye', unlockStage: 0, name: '调色瓶', description: '将当前落块染成棋盘上最多的颜色。' },
       ...SPECIALS.map(block=>({id:'block-'+block.id,unlockStage:block.unlockStage??0,name:block.name,blockEffect:block.id,description:block.description,detail:block.detail}))
     ],
     specials: SPECIALS,
@@ -192,8 +192,8 @@
     return current+Math.max(0,size-p.recurrenceEnd)*(current-previous);
   };
   root.liteBlastBonus=function(snapshot,count){
-    // Exact integer arithmetic: round once after compounding all removed cells (1.015 = 203/200).
-    const denominator=200n**BigInt(count),growth=203n**BigInt(count)-denominator;
+    // Exact integer arithmetic: round once after compounding all removed cells (1.03 = 103/100).
+    const denominator=100n**BigInt(count),growth=103n**BigInt(count)-denominator;
     return Number((BigInt(snapshot)*growth*2n+denominator)/(denominator*2n));
   };
   const heavyMultiplier=cell=>1+Math.max(0,Number(cell.liteHeavyBonus)||0);
@@ -295,6 +295,8 @@
       if(!RULES.tools.some(tool=>tool.id===id)||!Number.isInteger(count)||count<=0)return false;
       this.liteInventory();
       this.lite.tools[id]=(this.lite.tools[id]||0)+count;
+      this.lite.acquiredTools ||= [];
+      if(!this.lite.acquiredTools.includes(id)) this.lite.acquiredTools.push(id);
       this.liteInventory();return true;
     };
     p.liteMoveTool = function (id,target) {
@@ -339,7 +341,11 @@
       }
       for(const offer of roll?.shopOffers||[])delete offer.sold;
       if(!Array.isArray(this.lite.seenShopTools)){
-        this.lite.seenShopTools = ['block-column', 'block-patch', 'block-heavy', 'supply', 'repair', 'swap'];
+        this.lite.seenShopTools = ['block-column', 'block-patch', 'block-heavy', 'supply', 'repair', 'swap', 'dye'];
+      }
+      this.lite.acquiredTools ||= [];
+      for(const [id, count] of Object.entries(this.lite.tools||{})){
+        if(count > 0 && !this.lite.acquiredTools.includes(id)) this.lite.acquiredTools.push(id);
       }
       for(const tool of RULES.tools)this.lite.tools[tool.id] ??= 0;
       this.liteInventory();
@@ -364,7 +370,12 @@
       const placementId=`${this.stage}:${cells[0].id}`;
       for(const cell of cells){cell.placementId=placementId;cell.liteAttached=true;}
       this.lite.lastPlacementIds=cells.map(c=>c.id);
-      if(SPECIALS.some(s=>s.id===cells[0].liteEffect))this.lite.landing={effect:cells[0].liteEffect,ids:cells.map(c=>c.id)};
+      if(SPECIALS.some(s=>s.id===cells[0].liteEffect)){
+        this.lite.landing={effect:cells[0].liteEffect,ids:cells.map(c=>c.id)};
+        const specialId='block-'+cells[0].liteEffect;
+        this.lite.acquiredTools ||= [];
+        if(!this.lite.acquiredTools.includes(specialId)) this.lite.acquiredTools.push(specialId);
+      }
     };
     p.litePrepareClear = function () { this.liteEnsureExpansion(); };
     p.resolvePendingSpecial = function () {
@@ -433,7 +444,7 @@
     };
     p.reset = function (shapeSeed = 42, rewardSeed = shapeSeed) {
       this.lite = {
-        toolOrder: ['swap'], coins: 0, tools: { ...emptyTools(), swap: 1 }, shopPurchases: {}, seenShopTools: ['block-column', 'block-patch', 'block-heavy', 'supply', 'repair', 'swap'], extraDrops: 0, buffs: [], specials: [], specialToolsMigrated:true, lastPlacementIds: [], clears: 0,
+        toolOrder: ['swap'], coins: 0, tools: { ...emptyTools(), swap: 1 }, acquiredTools: ['swap'], shopPurchases: {}, seenShopTools: ['block-column', 'block-patch', 'block-heavy', 'supply', 'repair', 'swap', 'dye'], extraDrops: 0, buffs: [], specials: [], specialToolsMigrated:true, lastPlacementIds: [], clears: 0,
         roll: null, clearCoinStage:-1, zeroDropKey:null, phaseIndex:0, seed: (rewardSeed ^ 0x6a09e667) >>> 0
       };
       const result = original.reset.call(this, shapeSeed, rewardSeed);
@@ -631,6 +642,9 @@
       // - an existing block in this.board in that column
       // - or the rotor at (0, 0) if the cell is in column 0
       // - or another cell from this piece that already landed in that column.
+      this.lite.acquiredTools ||= [];
+      if (!this.lite.acquiredTools.includes('block-heavy')) this.lite.acquiredTools.push('block-heavy');
+
       // If a cell has no obstacle below it, it has missed and vanishes immediately.
       const landed = [];
       const sorted = raw.sort((a, b) => a.y - b.y || a.x - b.x);
@@ -685,16 +699,16 @@
         return true;
       }
 
-      // 1. Eliminate up to 6 rows downwards per occupied column, AND eliminate the heavy block itself!
+      // 1. Eliminate downwards per occupied column, AND eliminate the heavy block itself!
       // ("超重方块自己也会被自己的效果消掉，不会造成悬空")
       const occupiedCols = [...new Set(landed.map(cell => cell.x))];
       const removedUnderneath = [];
       for (const col of occupiedCols) {
         const colLanded = landed.filter(cell => cell.x === col);
         const minLandedY = Math.min(...colLanded.map(cell => cell.y));
-        const colCandidates = this.board.filter(b => b.x === col && b.y < minLandedY && (minLandedY - b.y <= 6));
+        const colCandidates = this.board.filter(b => b.x === col && b.y < minLandedY);
         colCandidates.sort((a, b) => b.y - a.y);
-        removedUnderneath.push(...colCandidates.slice(0, 6));
+        removedUnderneath.push(...colCandidates);
       }
 
       // The heavy block itself is also eliminated along with the crushed blocks
@@ -706,6 +720,26 @@
       this.lite.lastPlacementIds = [];
 
       const scoring = this.awardCells(removed, 'tool');
+      if (removed.length > 0) {
+        const count = removed.length;
+        const extraBasePerCell = count;
+        const extraBaseBonus = count * extraBasePerCell;
+        const boost = scoring.boost ?? 1;
+        const synergy = scoring.synergyMultiplier ?? 1;
+        const extraBonus = Math.round(extraBaseBonus * boost * synergy);
+        this.score += extraBonus;
+        this.levelScore += extraBonus;
+        this.checkpointScore += extraBonus;
+        this.chainPoints += extraBonus;
+        scoring.points += extraBonus;
+        scoring.chainPoints = this.chainPoints;
+        scoring.base = (scoring.base || 0) + extraBaseBonus;
+        scoring.score0 = (scoring.score0 || 0) + extraBaseBonus;
+        scoring.perCell = (scoring.perCell || 1) + extraBasePerCell;
+        scoring.heavyBonus = extraBonus;
+        scoring.heavyBaseBonus = extraBaseBonus;
+        scoring.heavyBonusPerCell = extraBasePerCell;
+      }
 
       const lever = landed.length ? landed.reduce((n, cell) => n + cell.x, 0) / landed.length : 0;
       const torque = { lever, dir: lever >= 1 ? -1 : lever <= -1 ? 1 : 0 };
@@ -912,7 +946,7 @@
         });
 
         const dominantColor = this.liteDyeColor();
-        const cappedRing = ring.slice(0, 24);
+        const cappedRing = ring.slice(0, 32);
         const added = cappedRing.map(cell => ({
           x: cell.x,
           y: cell.y,
