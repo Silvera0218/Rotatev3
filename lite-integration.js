@@ -270,7 +270,9 @@ function liteCloseReward(){liteShopSessionNewTools=null;liteRewardAdvance=null;l
 function liteCloseShopDetail(restoreFocus=true){
   const selection=liteShopSelection;liteShopSelection=null;
   const restore=()=>{if(restoreFocus&&selection){
-    const card=I('lite-shop-offers')?.querySelector(`[data-slot="${selection.slot}"]`);
+    const card=selection.mode==='sell'
+      ? I('lite-shop-sell-offers')?.querySelector(`[data-tool-id="${selection.tool?.id}"]`)
+      : I('lite-shop-offers')?.querySelector(`[data-slot="${selection.slot}"]`);
     (card&&!card.disabled&&!card.hidden?card:I('lite-next'))?.focus({preventScroll:true});
   }};
   if(liteShopDialog?.open){if(liteShopDialog.dataset.v3Closing==='true')return;liteShopDialog.addEventListener('close',restore,{once:true});liteShopDialog.close();}else restore();
@@ -296,6 +298,24 @@ function liteShopMaxQuantity(offer){
 }
 function liteRenderShopDetail(){
   if(!liteShopDialog?.open||!liteShopSelection)return;
+  if(liteShopSelection.mode==='sell'){
+    const tool=liteShopSelection.tool,owned=L.lite.tools[tool.id]||0;
+    const quantity=Math.min(owned,Math.max(1,liteShopQuantity));
+    const unitPrice=L.liteToolSellPrice(tool.id);
+    const totalPrice=unitPrice*quantity;
+    I('lite-shop-detail-name').textContent=tool.name+' ×'+quantity;
+    I('lite-shop-detail-quantity').textContent=String(quantity);
+    I('lite-shop-detail-quantity').setAttribute('aria-label','出售数量 '+quantity);
+    I('lite-shop-detail-minus').disabled=quantity<=1;
+    I('lite-shop-detail-plus').disabled=quantity>=owned;
+    I('lite-shop-detail-price').textContent='回收收益 +'+totalPrice+' 金币';
+    I('lite-shop-detail-wallet').textContent=`持有 ${owned} 件 · 出售单价 ${unitPrice} 金币 (售价半价)`;
+    const actionBtn=I('lite-shop-detail-buy');
+    actionBtn.disabled=owned<=0;
+    actionBtn.textContent='确认出售 (+'+totalPrice+' 金币)';
+    actionBtn.dataset.mode='sell';
+    return;
+  }
   const offer=liteShopSelection.offer,entry=offer.kind==='special'?liteSpecial(offer.item):liteTool(offer.item);
   const quantity=liteShopQuantity,max=liteShopMaxQuantity(offer),total=L.liteOfferBatchPrice(offer,quantity),unit=L.liteOfferPrice(offer);
   I('lite-shop-detail-name').textContent=entry.name+' ×'+quantity;
@@ -307,32 +327,48 @@ function liteRenderShopDetail(){
   I('lite-shop-detail-wallet').textContent=`持有 ${L.lite.coins} 金币 · 单价 ${unit} 金币`;
   const buy=I('lite-shop-detail-buy'),poor=max===0||L.lite.coins<total;
   buy.disabled=poor;buy.textContent=poor?'金币不足':'购买 ×'+quantity;
+  delete buy.dataset.mode;
+}
+function liteEnsureShopDialog(){
+  if(liteShopDialog)return;
+  liteShopDialog=document.createElement('dialog');liteShopDialog.id='lite-shop-detail';
+  liteShopDialog.setAttribute('aria-labelledby','lite-shop-detail-name');liteShopDialog.setAttribute('aria-describedby','lite-shop-detail-effect');
+  liteShopDialog.innerHTML='<div class="lite-shop-detail-head"><div id="lite-shop-detail-icon" aria-hidden="true"></div><div><small id="lite-shop-detail-category"></small><h2 id="lite-shop-detail-name"></h2></div></div><p id="lite-shop-detail-effect"></p><div class="lite-shop-detail-cost"><strong id="lite-shop-detail-price"></strong><span id="lite-shop-detail-wallet"></span></div><div class="lite-shop-detail-quantity" role="group" aria-label="数量"><button type="button" id="lite-shop-detail-minus" aria-label="减少数量">−</button><strong id="lite-shop-detail-quantity">1</strong><button type="button" id="lite-shop-detail-plus" aria-label="增加数量">＋</button></div><div class="lite-shop-detail-actions"><button type="button" id="lite-shop-detail-cancel" class="v3-popup-close" aria-label="关闭详情" title="关闭"></button><button type="button" id="lite-shop-detail-buy">购买 ×1</button></div>';
+  document.body.append(liteShopDialog);
+  I('lite-shop-detail-cancel').onclick=()=>liteCloseShopDetail();
+  I('lite-shop-detail-minus').onclick=()=>{liteShopQuantity=Math.max(1,liteShopQuantity-1);liteRenderShopDetail();};
+  I('lite-shop-detail-plus').onclick=()=>{
+    const max=liteShopSelection?.mode==='sell'?(L.lite.tools[liteShopSelection.tool.id]||0):liteShopMaxQuantity(liteShopSelection.offer);
+    if(max>liteShopQuantity)liteShopQuantity++;
+    liteRenderShopDetail();
+  };
+  liteShopDialog.addEventListener('cancel',e=>{e.preventDefault();liteCloseShopDetail();});
+  liteShopDialog.addEventListener('keydown',e=>e.stopPropagation());
+  installRotationPopupMotion(liteShopDialog);
+  let outsideDown=false;
+  const outside=e=>{const r=liteShopDialog.getBoundingClientRect();return e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom;};
+  liteShopDialog.addEventListener('pointerdown',e=>{outsideDown=outside(e);});
+  liteShopDialog.addEventListener('click',e=>{if(outsideDown&&outside(e))liteCloseShopDetail();outsideDown=false;});
+  I('lite-shop-detail-buy').onclick=()=>{
+    if(!liteShopSelection)return;
+    if(liteShopSelection.mode==='sell'){
+      const toolId=liteShopSelection.tool.id;
+      if(!L.liteSellTool(toolId,liteShopQuantity)){liteRenderShopDetail();return;}
+      liteUpdateReward();liteSync();d3();se.play('clear');liteSaveSafe();liteCloseShopDetail();
+      return;
+    }
+    const slot=liteShopSelection?.slot;if(slot===undefined)return;
+    if(!L.liteBuyOffer(slot,liteShopQuantity)){liteRenderShopDetail();return;}
+    liteUpdateReward();liteSync();d3();se.play('clear');liteSaveSafe();liteCloseShopDetail();
+  };
+  const reposition=()=>{if(!liteShopSelection)return;const r=liteShopSelection.button.getBoundingClientRect();liteShopSelection.point={x:r.left+r.width/2,y:r.top+r.height/2};litePositionShopDetail();};
+  window.addEventListener('resize',reposition);window.visualViewport?.addEventListener('resize',reposition);
 }
 function liteOpenShopDetail(offer,button,event){
-  if(!liteShopDialog){
-    liteShopDialog=document.createElement('dialog');liteShopDialog.id='lite-shop-detail';
-    liteShopDialog.setAttribute('aria-labelledby','lite-shop-detail-name');liteShopDialog.setAttribute('aria-describedby','lite-shop-detail-effect');
-    liteShopDialog.innerHTML='<div class="lite-shop-detail-head"><div id="lite-shop-detail-icon" aria-hidden="true"></div><div><small id="lite-shop-detail-category"></small><h2 id="lite-shop-detail-name"></h2></div></div><p id="lite-shop-detail-effect"></p><div class="lite-shop-detail-cost"><strong id="lite-shop-detail-price"></strong><span id="lite-shop-detail-wallet"></span></div><div class="lite-shop-detail-quantity" role="group" aria-label="购买数量"><button type="button" id="lite-shop-detail-minus" aria-label="减少购买数量">−</button><strong id="lite-shop-detail-quantity">1</strong><button type="button" id="lite-shop-detail-plus" aria-label="增加购买数量">＋</button></div><div class="lite-shop-detail-actions"><button type="button" id="lite-shop-detail-cancel" class="v3-popup-close" aria-label="关闭道具详情" title="关闭"></button><button type="button" id="lite-shop-detail-buy">购买 ×1</button></div>';
-    document.body.append(liteShopDialog);
-    I('lite-shop-detail-cancel').onclick=()=>liteCloseShopDetail();
-    I('lite-shop-detail-minus').onclick=()=>{liteShopQuantity=Math.max(1,liteShopQuantity-1);liteRenderShopDetail();};
-    I('lite-shop-detail-plus').onclick=()=>{const max=liteShopMaxQuantity(liteShopSelection.offer);if(max>liteShopQuantity)liteShopQuantity++;liteRenderShopDetail();};
-    liteShopDialog.addEventListener('cancel',e=>{e.preventDefault();liteCloseShopDetail();});
-    liteShopDialog.addEventListener('keydown',e=>e.stopPropagation());
-    installRotationPopupMotion(liteShopDialog);
-    let outsideDown=false;
-    const outside=e=>{const r=liteShopDialog.getBoundingClientRect();return e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom;};
-    liteShopDialog.addEventListener('pointerdown',e=>{outsideDown=outside(e);});
-    liteShopDialog.addEventListener('click',e=>{if(outsideDown&&outside(e))liteCloseShopDetail();outsideDown=false;});
-    I('lite-shop-detail-buy').onclick=()=>{
-      const slot=liteShopSelection?.slot;if(slot===undefined)return;
-      if(!L.liteBuyOffer(slot,liteShopQuantity)){liteRenderShopDetail();return;}
-      liteUpdateReward();liteSync();d3();se.play('clear');liteSaveSafe();liteCloseShopDetail();
-    };
-    const reposition=()=>{if(!liteShopSelection)return;const r=liteShopSelection.button.getBoundingClientRect();liteShopSelection.point={x:r.left+r.width/2,y:r.top+r.height/2};litePositionShopDetail();};
-    window.addEventListener('resize',reposition);window.visualViewport?.addEventListener('resize',reposition);
-  }
-  const rect=button.getBoundingClientRect();liteShopQuantity=1;liteShopSelection={slot:offer.slot,offer,button,point:event.detail?{x:event.clientX,y:event.clientY}:{x:rect.left+rect.width/2,y:rect.top+rect.height/2}};
+  liteEnsureShopDialog();
+  if(!offer)return;
+  const rect=button.getBoundingClientRect();liteShopQuantity=1;liteShopSelection={mode:'buy',slot:offer.slot,offer,button,point:event.detail?{x:event.clientX,y:event.clientY}:{x:rect.left+rect.width/2,y:rect.top+rect.height/2}};
+  delete liteShopDialog.dataset.mode;
   const entry=offer.kind==='special'?liteSpecial(offer.item):liteTool(offer.item);
   I('lite-shop-detail-category').textContent={tool:'道具',special:'特殊方块'}[offer.kind];
   I('lite-shop-detail-effect').textContent=entry.detail||entry.description;
@@ -340,12 +376,29 @@ function liteOpenShopDetail(offer,button,event){
   art.innerHTML=offer.kind==='special'?liteBlockIcon(offer.item):liteIcon(offer.item);
   liteShopDialog.showModal();liteRenderShopDetail();litePositionShopDetail();(I('lite-shop-detail-buy').disabled?I('lite-shop-detail-cancel'):I('lite-shop-detail-buy')).focus({preventScroll:true});
 }
+function liteOpenShopSellDetail(tool,button,event){
+  liteEnsureShopDialog();
+  if(!tool)return;
+  const rect=button.getBoundingClientRect();liteShopQuantity=1;
+  liteShopSelection={mode:'sell',tool,button,point:event.detail?{x:event.clientX,y:event.clientY}:{x:rect.left+rect.width/2,y:rect.top+rect.height/2}};
+  liteShopDialog.dataset.mode='sell';
+  I('lite-shop-detail-category').textContent=(tool.blockEffect?'特殊方块':'道具')+' · 出售';
+  I('lite-shop-detail-effect').textContent=tool.detail||tool.description;
+  const art=I('lite-shop-detail-icon');art.replaceChildren();
+  art.innerHTML=tool.blockEffect?liteBlockIcon(tool.blockEffect):liteIcon(tool.id);
+  liteShopDialog.showModal();liteRenderShopDetail();litePositionShopDetail();
+  (I('lite-shop-detail-buy').disabled?I('lite-shop-detail-cancel'):I('lite-shop-detail-buy')).focus({preventScroll:true});
+}
 function liteCreateReward(){
   if(liteRewardPanel)return;
   liteRewardPanel=document.createElement('section');liteRewardPanel.id='lite-reward-panel';liteRewardPanel.hidden=true;
-  liteRewardPanel.innerHTML='<div id="lite-reward-heading"><h2 id="lite-reward-title">补给站</h2><div class="v3-supply-actions"><button id="v3-shop-open" type="button" aria-label="打开道具商店"><img src="./assets/icons/shop-cart.svg" width="26" height="26" alt=""><span class="v3-shop-btn-text"><span class="v3-shop-btn-main">商店</span><span class="v3-shop-btn-sub"></span></span><span class="v3-shop-badge" id="v3-shop-badge" aria-hidden="true" hidden>!</span></button><span id="lite-shop-wallet"></span></div></div><p id="lite-reward-summary">免费补给 · 选择一件</p><div id="v3-reward-choices"></div><div id="lite-choice-refresh"><button id="lite-confirm-reward" type="button" hidden>确认领取</button><button id="lite-refresh-reward" type="button"></button><span id="lite-refresh-status" role="status"></span></div><div id="lite-shop" hidden><nav id="lite-shop-categories" aria-label="商品分类"></nav><div id="lite-shop-offers"></div></div><button id="lite-next" type="button" hidden>返回补给</button>';
+  liteRewardPanel.innerHTML='<div id="lite-reward-heading"><h2 id="lite-reward-title">补给站</h2><div class="v3-supply-actions"><button id="v3-shop-open" type="button" aria-label="打开道具商店"><img src="./assets/icons/shop-cart.svg" width="26" height="26" alt=""><span class="v3-shop-btn-text"><span class="v3-shop-btn-main">商店</span><span class="v3-shop-btn-sub"></span></span><span class="v3-shop-badge" id="v3-shop-badge" aria-hidden="true" hidden>!</span></button><span id="lite-shop-wallet"></span></div></div><p id="lite-reward-summary">免费补给 · 选择一件</p><div id="v3-reward-choices"></div><div id="lite-choice-refresh"><button id="lite-confirm-reward" type="button" hidden>确认领取</button><button id="lite-refresh-reward" type="button"></button><span id="lite-refresh-status" role="status"></span></div><div id="lite-shop" hidden><nav id="lite-shop-modes" class="lite-shop-modes" aria-label="商店功能"><button type="button" class="lite-shop-mode-btn" data-mode="buy" aria-pressed="true">选购道具</button><button type="button" class="lite-shop-mode-btn" data-mode="sell" aria-pressed="false">出售道具</button></nav><div id="lite-shop-buy-view"><nav id="lite-shop-categories" aria-label="商品分类"></nav><div id="lite-shop-offers"></div></div><div id="lite-shop-sell-view" hidden><div class="lite-shop-sell-tip">背包持有道具 · 回收价为当前售价的 50%</div><div id="lite-shop-sell-offers"></div><div id="lite-shop-sell-empty" class="lite-shop-sell-empty" hidden>暂无持有道具可出售</div></div></div><button id="lite-next" type="button" hidden>返回补给</button>';
   const hero=document.createElement('header');hero.id='lite-shop-hero';hero.hidden=true;hero.innerHTML='<div class="lite-shop-hero-inner"><img src="./assets/ui/shopkeeper.png" width="128" height="128" alt="机器人店员"><div><span>SHOP</span><h2>道具商店</h2></div></div>';
   I('overlay').querySelector('.dialog').append(hero,liteRewardPanel);
+  for(const mode of ['buy','sell']){
+    const button=liteRewardPanel.querySelector(`.lite-shop-mode-btn[data-mode="${mode}"]`);
+    if(button)button.onclick=()=>{L.lite.roll.shopMode=mode;liteUpdateReward();liteSaveSafe();};
+  }
   for(const [id,label] of [['all','全部'],['tool','道具'],['special','特殊方块']]){
     const button=document.createElement('button');button.type='button';button.dataset.category=id;button.textContent=label;
     button.onclick=()=>{L.lite.roll.shopCategory=id;liteUpdateReward();liteSaveSafe();};I('lite-shop-categories').append(button);
@@ -456,16 +509,49 @@ function liteUpdateReward(){
     };
     choices.append(button);
   }
-  const category=roll.shopCategory||'all';for(const b of I('lite-shop-categories').children)b.setAttribute('aria-pressed',String(b.dataset.category===category));
-  const offers=I('lite-shop-offers');offers.replaceChildren();
-  for(const offer of roll.shopOffers||[]){
-    const tool=offer.kind==='special'?liteTool('block-'+offer.item):liteTool(offer.item),button=document.createElement('button');button.type='button';button.className='lite-shop-buy';button.dataset.slot=offer.slot;button.hidden=category!=='all'&&offer.kind!==category;
-    const isNew=liteShopSessionNewTools?liteShopSessionNewTools.has(tool.id):false;
-    button.dataset.new=String(isNew);
-    button.innerHTML='<span class="v3-shop-card-heading"><strong></strong><span class="v3-shop-card-labels"><span class="v3-shop-new-tag"'+(isNew?'':' hidden')+'>NEW!</span><span class="v3-shop-owned" hidden></span><span class="lite-shop-category"></span></span></span><span class="lite-shop-art">'+liteIcon(tool.id)+'</span><span class="lite-shop-price"></span>';
-    const owned=L.lite.tools[tool.id]||0,badge=button.querySelector('.v3-shop-owned');badge.hidden=owned<=0;badge.textContent=`已拥有 ×${owned}`;
-    button.querySelector('strong').textContent=tool.name;button.querySelector('.lite-shop-category').textContent=tool.blockEffect?'特殊方块':'道具';button.querySelector('.lite-shop-price').textContent=`${L.liteOfferPrice(offer)} 金币`;
-    button.title=tool.description;button.onclick=event=>liteOpenShopDetail(offer,button,event);offers.append(button);
+  const shopMode=roll.shopMode||'buy';
+  const modesNav=I('lite-shop-modes');
+  if(modesNav){
+    for(const b of modesNav.children){
+      b.setAttribute('aria-pressed',String(b.dataset.mode===shopMode));
+    }
+  }
+  const buyView=I('lite-shop-buy-view'),sellView=I('lite-shop-sell-view');
+  if(buyView)buyView.hidden=shopMode!=='buy';
+  if(sellView)sellView.hidden=shopMode!=='sell';
+
+  if(shopMode==='buy'){
+    const category=roll.shopCategory||'all';for(const b of I('lite-shop-categories').children)b.setAttribute('aria-pressed',String(b.dataset.category===category));
+    const offers=I('lite-shop-offers');offers.replaceChildren();
+    for(const offer of roll.shopOffers||[]){
+      const tool=offer.kind==='special'?liteTool('block-'+offer.item):liteTool(offer.item),button=document.createElement('button');button.type='button';button.className='lite-shop-buy';button.dataset.slot=offer.slot;button.hidden=category!=='all'&&offer.kind!==category;
+      const isNew=liteShopSessionNewTools?liteShopSessionNewTools.has(tool.id):false;
+      button.dataset.new=String(isNew);
+      button.innerHTML='<span class="v3-shop-card-heading"><strong></strong><span class="v3-shop-card-labels"><span class="v3-shop-new-tag"'+(isNew?'':' hidden')+'>NEW!</span><span class="v3-shop-owned" hidden></span><span class="lite-shop-category"></span></span></span><span class="lite-shop-art">'+liteIcon(tool.id)+'</span><span class="lite-shop-price"></span>';
+      const owned=L.lite.tools[tool.id]||0,badge=button.querySelector('.v3-shop-owned');badge.hidden=owned<=0;badge.textContent=`已拥有 ×${owned}`;
+      button.querySelector('strong').textContent=tool.name;button.querySelector('.lite-shop-category').textContent=tool.blockEffect?'特殊方块':'道具';button.querySelector('.lite-shop-price').textContent=`${L.liteOfferPrice(offer)} 金币`;
+      button.title=tool.description;button.onclick=event=>liteOpenShopDetail(offer,button,event);offers.append(button);
+    }
+  }else{
+    const sellOffers=I('lite-shop-sell-offers');
+    if(sellOffers){
+      sellOffers.replaceChildren();
+      const ownedTools=RULES.tools.filter(t=>(L.lite.tools[t.id]||0)>0);
+      const emptyTip=I('lite-shop-sell-empty');
+      if(emptyTip)emptyTip.hidden=ownedTools.length>0;
+      for(const tool of ownedTools){
+        const owned=L.lite.tools[tool.id]||0,unitSellPrice=L.liteToolSellPrice(tool.id);
+        const button=document.createElement('button');button.type='button';button.className='lite-shop-buy lite-shop-sell-card';button.dataset.toolId=tool.id;
+        button.innerHTML='<span class="v3-shop-card-heading"><strong></strong><span class="v3-shop-card-labels"><span class="v3-shop-owned"></span><span class="lite-shop-category"></span></span></span><span class="lite-shop-art">'+(tool.blockEffect?liteBlockIcon(tool.blockEffect):liteIcon(tool.id))+'</span><span class="lite-shop-price lite-shop-sell-price"></span>';
+        button.querySelector('strong').textContent=tool.name;
+        button.querySelector('.v3-shop-owned').textContent=`持有 ×${owned}`;
+        button.querySelector('.lite-shop-category').textContent=tool.blockEffect?'特殊方块':'道具';
+        button.querySelector('.lite-shop-price').innerHTML=`+${unitSellPrice} 金币 <small>(半价)</small>`;
+        button.title=tool.description;
+        button.onclick=event=>liteOpenShopSellDetail(tool,button,event);
+        sellOffers.append(button);
+      }
+    }
   }
   liteUpdateRefresh();
 }

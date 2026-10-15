@@ -196,6 +196,10 @@
     const denominator=100n**BigInt(count),growth=103n**BigInt(count)-denominator;
     return Number((BigInt(snapshot)*growth*2n+denominator)/(denominator*2n));
   };
+  root.liteStageClearCoins = function (stage = 0, baseCoins = RULES.clearCoins) {
+    const s = Math.max(0, stage) + 1;
+    return Math.round(baseCoins * (1 + Math.log(s)));
+  };
   const heavyMultiplier=cell=>1+Math.max(0,Number(cell.liteHeavyBonus)||0);
   root.liteScoreConnectedColors = function (cells, result, game) {
     const p=RULES.colorScoring;
@@ -875,11 +879,14 @@
       this.liteAwardClearCoins();
       return result;
     };
+    p.liteStageClearCoins = function (stage = this.stage ?? 0) {
+      return root.liteStageClearCoins(stage);
+    };
     p.liteAwardClearCoins = function () {
       if(!rewardPhase(this)||this.lite.clearCoinStage===this.stage)return false;
       // Entered saves from earlier versions already received this reward.
       this.lite.clearCoinStage=this.stage;
-      const base=this.lite.roll?.coins??RULES.clearCoins;
+      const base=this.liteStageClearCoins(this.stage);
       const excess=Math.max(0,this.checkpointScore-this.goal);
       const overflow=this.lite.roll?.entered?0:Math.round(excess/10);
       this.lite.clearCoinReward={stage:this.stage,base,excess,overflow,total:base+overflow};
@@ -887,7 +894,8 @@
       return true;
     };
     p.liteClearCoinReward = function () {
-      return this.lite.clearCoinReward?.stage===this.stage?this.lite.clearCoinReward:{stage:this.stage,base:RULES.clearCoins,excess:0,overflow:0,total:RULES.clearCoins};
+      const base=this.liteStageClearCoins(this.stage);
+      return this.lite.clearCoinReward?.stage===this.stage?this.lite.clearCoinReward:{stage:this.stage,base,excess:0,overflow:0,total:base};
     };
     p.checkDeadlock = function (...args) {
       // The original rescue search knows neither lite tool. Let the player use
@@ -1039,9 +1047,36 @@
       for(let n=0;n<count;n++)[price,next]=[next,price+next];
       return price;
     };
+    p.liteToolBuyPrice = function (id) {
+      if(!id)return RULES.toolPrice;
+      const purchases=this.lite?.shopPurchases?.[id]||0;
+      return fibonacciPrice(purchases);
+    };
+    p.liteToolSellPrice = function (id) {
+      const buyPrice=this.liteToolBuyPrice(id);
+      return Math.floor(buyPrice/2);
+    };
+    p.liteCanSellTool = function (id, quantity=1) {
+      if(!id||!Number.isInteger(quantity)||quantity<=0)return false;
+      if(!rewardPhase(this)||!this.lite)return false;
+      const r=this.lite.roll;
+      if(!r?.entered||r.adReadyAt!==null)return false;
+      const owned=this.lite.tools?.[id]||0;
+      return owned>=quantity;
+    };
+    p.liteSellTool = function (id, quantity=1) {
+      if(!this.liteCanSellTool(id,quantity))return false;
+      const unitPrice=this.liteToolSellPrice(id);
+      const totalPrice=unitPrice*quantity;
+      this.lite.tools[id]-=quantity;
+      this.lite.coins+=totalPrice;
+      this.liteInventory();
+      this.events.push({kind:'lite-sell',tool:id,quantity,unitPrice,totalPrice});
+      return true;
+    };
     p.liteOfferPrice = function (offer) {
       const id=offer.kind==='special'?'block-'+offer.item:offer.item;
-      return fibonacciPrice(this.lite.shopPurchases?.[id]||0);
+      return this.liteToolBuyPrice(id);
     };
     p.liteOfferBatchPrice = function (offer, quantity=1) {
       if(!Number.isInteger(quantity)||quantity<=0)return Infinity;

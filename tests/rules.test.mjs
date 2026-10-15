@@ -1164,4 +1164,51 @@ test('consecutive clear independent multiplier zone S_n = S_n0 * (1 + 5n%)',()=>
   assert.equal(combo3Scoring.points, Math.round(Sn0_3 * 1.10));
   assert.equal(combo3Scoring.comboBonus, Math.round(Sn0_3 * 1.10) - Sn0_3);
 });
+test('clear coins follow logarithmic distribution with base as initial value',()=>{
+  const g = make();
+  assert.equal(g.liteStageClearCoins(0), 5);  // Stage 1: ln(1) = 0 -> 5
+  assert.equal(g.liteStageClearCoins(1), 8);  // Stage 2: round(5*(1+ln(2))) = 8
+  assert.equal(g.liteStageClearCoins(2), 10); // Stage 3: round(5*(1+ln(3))) = 10
+  assert.equal(g.liteStageClearCoins(4), 13); // Stage 5: round(5*(1+ln(5))) = 13
+  assert.equal(g.liteStageClearCoins(9), 17); // Stage 10: round(5*(1+ln(10))) = 17
+
+  // Stage 1 reward:
+  g.stage = 1;
+  g.checkpointScore = g.goal;
+  g.completeCheckpoint();
+  assert.equal(g.liteClearCoinReward().base, 8);
+});
+test('shop tool selling price is half of current purchase price and updates inventory and coins',()=>{
+  const g = make();
+  g.phase = 'checkpoint-complete';
+  g.litePrepareReward();
+  g.lite.tools.swap = 3;
+  g.lite.coins = 10;
+
+  // Base buy price is 5 -> sell price is floor(5/2) = 2
+  assert.equal(g.liteToolBuyPrice('swap'), 5);
+  assert.equal(g.liteToolSellPrice('swap'), 2);
+
+  // Sell 1 swap
+  assert.equal(g.liteSellTool('swap', 1), true);
+  assert.equal(g.lite.tools.swap, 2);
+  assert.equal(g.lite.coins, 12);
+  assert.equal(g.events.some(e => e.kind === 'lite-sell' && e.tool === 'swap' && e.totalPrice === 2), true);
+
+  // If purchase count increases buy price to 10 -> sell price becomes 5
+  g.lite.shopPurchases ||= {};
+  g.lite.shopPurchases.swap = 1;
+  assert.equal(g.liteToolBuyPrice('swap'), 10);
+  assert.equal(g.liteToolSellPrice('swap'), 5);
+
+  // Sell remaining 2 swaps at 5 each = 10 coins
+  assert.equal(g.liteSellTool('swap', 2), true);
+  assert.equal(g.lite.tools.swap, 0);
+  assert.equal(g.lite.coins, 22);
+
+  // Cannot sell when owned is 0
+  assert.equal(g.liteCanSellTool('swap', 1), false);
+  assert.equal(g.liteSellTool('swap', 1), false);
+});
+
 
