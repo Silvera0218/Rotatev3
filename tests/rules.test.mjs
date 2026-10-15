@@ -1322,4 +1322,85 @@ test('different items have tiered base prices and uncapped modified Fibonacci pr
   }
 });
 
+test('settlement eliminates remaining placed special blocks when drops are exhausted (投放次数耗尽消除特殊方块)', () => {
+  const g = make();
+  g.lite.coins = 10;
+  // Place 2 coin blocks, 2 glass blocks, and 2 normal blocks on the board
+  g.board = [
+    { x: 0, y: 1, type: 'L', id: g.id++, liteCoin: true },
+    { x: 1, y: 1, type: 'L', id: g.id++, liteCoin: true },
+    { x: 0, y: 2, type: 'T', id: g.id++, liteGlass: true },
+    { x: 1, y: 2, type: 'T', id: g.id++, liteGlass: true },
+    { x: 2, y: 1, type: 'I', id: g.id++ }, // normal block
+    { x: 2, y: 2, type: 'I', id: g.id++ }, // normal block
+  ];
+  const initialScore = g.checkpointScore;
+  g.dropsUsed = g.dropLimit; // drops exhausted!
+
+  assert.equal(g.checkDropLimit(), true);
+  // Special blocks (2 coin + 2 glass = 4 total) must be eliminated!
+  // Normal blocks must remain on board (unless later zero-drop clear, but at moment of special elimination only specials removed)
+  const specialRemaining = g.board.filter(c => c.liteCoin || c.liteGlass);
+  assert.equal(specialRemaining.length, 0);
+
+  // 4 special blocks eliminated in one batch: 2 coin cells * 4 batch size = 8 coins awarded!
+  assert.equal(g.lite.coins, 10 + 8);
+
+  // Points should be awarded for the eliminated cells
+  assert.ok(g.checkpointScore > initialScore);
+
+  // Clear event recorded
+  const specialClearEvent = g.events.find(e => e.kind === 'clear' && e.specialSettle);
+  assert.ok(specialClearEvent);
+  assert.equal(specialClearEvent.cells.length, 4);
+});
+
+test('settlement eliminates remaining placed special blocks before checkpoint complete when goal reached (通关结算前消除特殊方块)', () => {
+  const g = make();
+  g.lite.coins = 5;
+  // 1 coin block and 1 glass block on the board
+  g.board = [
+    { x: 0, y: 1, type: 'L', id: g.id++, liteCoin: true },
+    { x: 0, y: 2, type: 'S', id: g.id++, liteGlass: true },
+    { x: -1, y: 1, type: 'Z', id: g.id++ } // normal block
+  ];
+  g.checkpointScore = g.goal; // Goal reached with drops remaining!
+  assert.ok(g.dropsRemaining > 0);
+
+  const prevCoins = g.lite.coins;
+  const result = g.completeCheckpoint();
+  assert.equal(result, true);
+  assert.equal(g.phase, 'checkpoint-complete');
+
+  // Coin block (1 coin * 2 special cells = 2 coins) awarded to coins before clear coin settlement
+  // In addition to clear coins (stage 0 clear coin base = 5 + overflow)
+  assert.equal(g.lite.coins, prevCoins + 2 + 5);
+
+  // Special blocks cleared from board
+  assert.equal(g.board.some(c => c.liteCoin || c.liteGlass), false);
+
+  // Normal block was not touched by special elimination
+  assert.equal(g.board.some(c => c.type === 'Z'), true);
+});
+
+test('exhausted drops special elimination awards points that can reach goal and pass the checkpoint', () => {
+  const g = make();
+  g.lite.coins = 0;
+  // Score is just slightly below goal
+  g.checkpointScore = g.goal - 15;
+  // Place 3 special blocks that award enough points to exceed 15
+  g.board = [
+    { x: 0, y: 1, type: 'L', id: g.id++, liteCoin: true },
+    { x: 1, y: 1, type: 'L', id: g.id++, liteCoin: true },
+    { x: 2, y: 1, type: 'L', id: g.id++, liteDiamond: true }
+  ];
+  g.dropsUsed = g.dropLimit; // drops exhausted!
+
+  g.checkDropLimit();
+  // With specials eliminated and points awarded, checkpointScore should be >= goal
+  assert.ok(g.checkpointScore >= g.goal);
+  assert.ok(g.lite.coins > 0); // Coins awarded
+});
+
+
 

@@ -224,6 +224,7 @@
     return Math.round(baseCoins * (1 + 3.0 * Math.log(s)));
   };
   const heavyMultiplier=cell=>1+Math.max(0,Number(cell.liteHeavyBonus)||0);
+  const isLiteSpecialCell=cell=>!!(cell&&(cell.liteCoin||cell.liteGlass||cell.liteDiamond||cell.liteEffect||(cell.liteHeavyBonus>0)));
   root.liteScoreConnectedColors = function (cells, result, game) {
     const p=RULES.colorScoring;
     cells=[...new Map(cells.map(cell=>[colorKey(cell),cell])).values()];
@@ -631,8 +632,27 @@
       this.events.push({kind:'lite-zero-drop-clear',stage:this.stage,checkpoint:this.checkpoint,cells:this.cleared?.map(cell=>({...cell}))||[],scoring:this.lastScore,skipped:false});
       return true;
     };
+    p.liteEliminateRemainingSpecials = function (source = 'special-settle') {
+      if (!this.board || !this.board.length) return false;
+      const specials = this.board.filter(isLiteSpecialCell);
+      if (!specials.length) return false;
+      const ids = new Set(specials.map(c => c.id));
+      this.board = this.board.filter(c => !ids.has(c.id));
+      const scoring = this.awardCells(specials, source);
+      this.cleared = specials.map(c => ({ ...c }));
+      if (this.build) this.build.revision++;
+      this.events.push({
+        kind: 'clear',
+        cells: specials.map(c => ({ ...c })),
+        scoring,
+        source,
+        specialSettle: true
+      });
+      return true;
+    };
     p.checkDropLimit = function (...args) {
       if(this.phase==='play'&&this.dropsRemaining<=0){
+        this.liteEliminateRemainingSpecials('zero-drop');
         if(this.liteZeroDropClear())return true;
         if(this.checkpointScore>=this.goal&&this.completeCheckpoint())return true;
       }
@@ -651,8 +671,12 @@
     };
 
     p.spawn = function (...args) {
-      if (this.phase==='play' && this.dropsRemaining===0 && this.lite?.zeroDropKey!==`${this.stage}:${this.checkpoint}`) {
-        if (this.liteZeroDropClear()) return true;
+      if (this.phase==='play' && this.dropsRemaining===0) {
+        this.liteEliminateRemainingSpecials('zero-drop');
+        if (this.lite?.zeroDropKey!==`${this.stage}:${this.checkpoint}`) {
+          if (this.liteZeroDropClear()) return true;
+        }
+        if (this.checkpointScore>=this.goal && this.completeCheckpoint()) return true;
       }
       const old = this.active;
       const result = original.spawn.apply(this, args);
@@ -914,6 +938,9 @@
       return result;
     };
     p.completeCheckpoint = function () {
+      if (this.phase === 'play' && this.checkpointScore >= this.goal) {
+        this.liteEliminateRemainingSpecials('checkpoint-complete');
+      }
       // The original score gate also performs completion cleanup and emits renderer events.
       const result=original.completeCheckpoint.call(this);
       if(result)this.liteMarkCompleted(this.stage);
