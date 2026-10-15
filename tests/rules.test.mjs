@@ -1129,3 +1129,39 @@ test('acquiredTools tracks game tools acquisition across start, grants, inventor
   h.liteEnsureExpansion();
   assert(h.lite.acquiredTools.includes('block-pack'));
 });
+test('coin block (patch) landing with lever arm triggers rotor turn',()=>{
+  const g = make();
+  g.target.cells = [{ x: -5, y: -5 }];
+  g.active = { type: 'I', shape: [[1,0],[2,0],[3,0]], x: 0, y: 0, liteEffect: 'patch' };
+  g.lock();
+  assert.equal(g.phase, 'rotating');
+  assert.equal(g.events.some(e => e.kind === 'turn'), true);
+});
+test('consecutive clear independent multiplier zone S_n = S_n0 * (1 + 5n%)',()=>{
+  const g = make();
+  // Single clear (combo = 1, n = 0): no multiplier
+  const singleScoring = g.awardCells([{ x: 0, y: 1, type: 'L' }, { x: 0, y: 2, type: 'L' }, { x: 0, y: 3, type: 'L' }, { x: 0, y: 4, type: 'L' }]);
+  assert.equal(singleScoring.combo, 1);
+  assert.equal(singleScoring.comboN, 0);
+  assert.equal(singleScoring.comboMultiplier, 1);
+  assert.equal(singleScoring.comboBonus, 0);
+
+  // 2-consecutive clear (combo = 2, n = 1, +5%):
+  const combo2Scoring = g.awardCells([{ x: 1, y: 1, type: 'S' }, { x: 1, y: 2, type: 'S' }, { x: 1, y: 3, type: 'S' }, { x: 1, y: 4, type: 'S' }]);
+  assert.equal(combo2Scoring.combo, 2);
+  assert.equal(combo2Scoring.comboN, 1);
+  assert.equal(combo2Scoring.comboMultiplier, 1.05);
+  const Sn0_2 = combo2Scoring.points - combo2Scoring.comboBonus;
+  assert.equal(combo2Scoring.points, Math.round(Sn0_2 * 1.05));
+  assert.equal(combo2Scoring.comboBonus, Math.round(Sn0_2 * 1.05) - Sn0_2);
+
+  // 3-consecutive clear (combo = 3, n = 2, +10%):
+  const combo3Scoring = g.awardCells([{ x: 2, y: 1, type: 'T' }, { x: 2, y: 2, type: 'T' }, { x: 2, y: 3, type: 'T' }, { x: 2, y: 4, type: 'T' }]);
+  assert.equal(combo3Scoring.combo, 3);
+  assert.equal(combo3Scoring.comboN, 2);
+  assert.equal(combo3Scoring.comboMultiplier, 1.10);
+  const Sn0_3 = combo3Scoring.points - combo3Scoring.comboBonus;
+  assert.equal(combo3Scoring.points, Math.round(Sn0_3 * 1.10));
+  assert.equal(combo3Scoring.comboBonus, Math.round(Sn0_3 * 1.10) - Sn0_3);
+});
+

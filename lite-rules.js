@@ -436,7 +436,7 @@
       this.events.push({kind:'special',effect:aliases[effect],liteEffect:effect,cells:landed,contact,removed,scoring,heavyBoost});
       if(moved)this.events.push({kind:'compact',before});
       this.build.revision++;
-      return {compact,repack,moved,scoring,retainTorque:effect==='column'};
+      return {compact,repack,moved,scoring,retainTorque:['column','patch','diamond'].includes(effect)};
     };
     p.liteRandom = function () {
       this.lite.seed = (Math.imul(this.lite.seed, 1664525) + 1013904223) >>> 0;
@@ -726,7 +726,7 @@
         const extraBaseBonus = count * extraBasePerCell;
         const boost = scoring.boost ?? 1;
         const synergy = scoring.synergyMultiplier ?? 1;
-        const extraBonus = Math.round(extraBaseBonus * boost * synergy);
+        const extraBonus = Math.round(extraBaseBonus * boost * synergy * (scoring.comboMultiplier || 1));
         this.score += extraBonus;
         this.levelScore += extraBonus;
         this.checkpointScore += extraBonus;
@@ -828,6 +828,28 @@
         this.score+=bonus;this.levelScore+=bonus;this.checkpointScore+=bonus;this.chainPoints+=bonus;
         result.points+=bonus;result.score0=(result.score0||0)+baseBonus;result.base=(result.base||0)+baseBonus;
         result.chainPoints=this.chainPoints;result.diamondBonus=bonus;result.diamondCellCount=diamondCells.length;result.diamondMultiplier=3;
+      }
+      const combo=Math.max(result.chain||1,result.streak||1);
+      if(combo>1){
+        const n=combo-1;
+        const originalPoints=result.points;
+        const comboMultiplier=1+0.05*n;
+        const finalPoints=Math.round(originalPoints*comboMultiplier);
+        const bonus=finalPoints-originalPoints;
+        this.score+=bonus;this.levelScore+=bonus;this.checkpointScore+=bonus;this.chainPoints+=bonus;
+        result.points=finalPoints;result.chainPoints=this.chainPoints;
+        result.combo=combo;result.comboN=n;result.comboMultiplier=comboMultiplier;result.comboBonus=bonus;
+        if(this.lastScore){
+          this.lastScore.points=finalPoints;this.lastScore.chainPoints=this.chainPoints;
+          this.lastScore.combo=combo;this.lastScore.comboN=n;
+          this.lastScore.comboMultiplier=comboMultiplier;this.lastScore.comboBonus=bonus;
+        }
+      }else{
+        result.combo=combo;result.comboN=0;result.comboMultiplier=1;result.comboBonus=0;
+        if(this.lastScore){
+          this.lastScore.combo=combo;this.lastScore.comboN=0;
+          this.lastScore.comboMultiplier=1;this.lastScore.comboBonus=0;
+        }
       }
       result.coinReward=this.liteAwardCoinCells(cells);
       if(cells.length&&source==='outline')this.lite.clears++;

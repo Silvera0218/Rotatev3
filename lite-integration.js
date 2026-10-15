@@ -232,7 +232,13 @@ Of=function(scoring,cells=[]){
   const box=I('score-feedback'),number=I('feedback-points');
   c3={t:0,duration:zt?1.25:1.65,anchor:{x:anchor.x,y:anchor.y},combo};scorePopupPulse=null;
   box.hidden=false;box.dataset.tier=combo>=3?'burst':combo>1?'chain':'normal';box.style.setProperty('--score-color',color);
-  I('feedback-title').textContent=title;box.dataset.heavy=String(!!scoring.heavyCellCount);box.dataset.diamond=String(!!scoring.diamondCellCount);I('feedback-multiplier').textContent=scoring.diamondCellCount?`钻石 ${scoring.diamondCellCount} 格 · ×3`:scoring.heavyCellCount?`超重 ${scoring.heavyCellCount} 格 · 最高 ×${scoring.heavyMaxMultiplier}`:'';I('feedback-detail').textContent='';
+  I('feedback-title').textContent=title;box.dataset.heavy=String(!!scoring.heavyCellCount);box.dataset.diamond=String(!!scoring.diamondCellCount);
+  let multiplierText=scoring.diamondCellCount?`钻石 ${scoring.diamondCellCount} 格 · ×3`:scoring.heavyBonus?`超重加成 +${scoring.heavyBonus}`:scoring.heavyCellCount?`超重 ${scoring.heavyCellCount} 格 · 最高 ×${scoring.heavyMaxMultiplier}`:'';
+  if(scoring.comboMultiplier&&scoring.comboMultiplier>1){
+    const comboText=`连消奖励 +${Math.round((scoring.comboMultiplier-1)*100)}%`;
+    multiplierText=multiplierText?`${multiplierText} · ${comboText}`:comboText;
+  }
+  I('feedback-multiplier').textContent=multiplierText;I('feedback-detail').textContent='';
   if(scoring.coinReward)liteShowCoinReward(scoring.coinReward,anchor);
   number.textContent=`+${Ne(scoring.points)}`;number.style.removeProperty('transform');delete number.dataset.scorePulse;
   number.style.fontSize=(combo>=3?66:combo>1?60:52)+'px';
