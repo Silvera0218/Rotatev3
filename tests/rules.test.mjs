@@ -270,15 +270,15 @@ test('colour score uses connected components, deduplicates intersections, and le
 test('completed real rotor turn drops once; no drop on piece rotation or repeated finish', () => {
   const g = make();
   scripted(g, [0.01, 0.01]);
-  const initial = g.lite.tools.shovel;
+  const initial = g.lite.tools.supply;
   g.rotatePiece();
-  assert.equal(g.lite.tools.shovel, initial);
+  assert.equal(g.lite.tools.supply, initial);
   g.board = [{ x: 1, y: 0, id: g.id++, type: 'L' }];
   g.beginRotation({ lever: 1, dir: -1 });
   g.finishRotation();
-  assert.equal(g.lite.tools.shovel, initial + 1);
+  assert.equal(g.lite.tools.supply, initial + 1);
   g.finishRotation();
-  assert.equal(g.lite.tools.shovel, initial + 1);
+  assert.equal(g.lite.tools.supply, initial + 1);
   assert.equal(g.events.filter(e => e.kind === 'lite-drop').length, 1);
 });
 
@@ -476,16 +476,16 @@ test('V3 has only five tools and seven special blocks, with no Buff gains or gro
 });
 test('every reward gives three unique mixed choices and persists without reroll',()=>{
  for(let seed=0;seed<40;seed++){
-  const g=new ctx.api.Game(seed),r=complete(g);assert.equal(r.route,'tool');assert.equal(r.entered,true);assert.equal(r.toolOptions.length,3);assert.equal(new Set(r.toolOptions).size,3);assert(r.toolOptions.some(id=>id.startsWith('block-')));assert(r.toolOptions.some(id=>!id.startsWith('block-')));
-  const saved=JSON.stringify(g.lite),h=make();h.phase=g.phase;h.lite=JSON.parse(saved);h.litePrepareReward();assert.equal(JSON.stringify(h.lite),saved);
-  const id=r.toolOptions[0],before=g.lite.tools[id];assert.equal(g.liteNext(),false);assert.equal(g.liteChooseTool(id),true);assert.equal(g.liteChooseTool(id),false);assert.equal(g.lite.tools[id],before+1);assert.equal(g.liteNext(),true);assert.equal(g.stage,1);assert.equal(g.lite.tools[id],before+1);
+  const g=new ctx.api.Game(seed);g.stage=2;const r=complete(g);assert.equal(r.route,'tool');assert.equal(r.entered,true);assert.equal(r.toolOptions.length,3);assert.equal(new Set(r.toolOptions).size,3);assert(r.toolOptions.some(id=>id.startsWith('block-')));assert(r.toolOptions.some(id=>!id.startsWith('block-')));
+  const saved=JSON.stringify(g.lite),h=make();h.stage=g.stage;h.phase=g.phase;h.lite=JSON.parse(saved);h.litePrepareReward();assert.equal(JSON.stringify(h.lite),saved);
+  const id=r.toolOptions[0],before=g.lite.tools[id];assert.equal(g.liteNext(),false);assert.equal(g.liteChooseTool(id),true);assert.equal(g.liteChooseTool(id),false);assert.equal(g.lite.tools[id],before+1);assert.equal(g.liteNext(),true);assert.equal(g.stage,3);assert.equal(g.lite.tools[id],before+1);
  }
 });
 test('choice refresh allows free once then three timed ads, rejects early/double claims and resumes saves',()=>{
- const g=make(),r=complete(g),before=[...r.toolOptions];assert.equal(g.liteStartRewardAd(0),false);assert.equal(g.liteRefreshReward(),true);assert(r.toolOptions.some(id=>!before.includes(id)));assert.equal(g.liteRefreshReward(),false);
+ const g=make();g.stage=6;const r=complete(g),before=[...r.toolOptions];assert.equal(g.liteStartRewardAd(0),false);assert.equal(g.liteRefreshReward(),true);assert(r.toolOptions.some(id=>!before.includes(id)));assert.equal(g.liteRefreshReward(),false);
  for(let i=0;i<3;i++){
   assert.equal(g.liteStartRewardAd(i*3000),true);assert.equal(g.liteChooseTool(r.toolOptions[0]),false);assert.equal(g.liteFinishRewardAd(i*3000+1999),false);
-  const h=make();h.phase=g.phase;h.lite=JSON.parse(JSON.stringify(g.lite));assert.equal(h.liteFinishRewardAd(i*3000+2000),true);assert.equal(h.lite.roll.adRefreshes,2-i);
+  const h=make();h.stage=g.stage;h.phase=g.phase;h.lite=JSON.parse(JSON.stringify(g.lite));assert.equal(h.liteFinishRewardAd(i*3000+2000),true);assert.equal(h.lite.roll.adRefreshes,2-i);
   assert.equal(g.liteFinishRewardAd(i*3000+2000),true);assert.equal(g.liteFinishRewardAd(i*3000+2000),false);assert(r.toolOptions.some(id=>id.startsWith('block-')));assert(r.toolOptions.some(id=>!id.startsWith('block-')));
  }
  assert.equal(g.liteStartRewardAd(20000),false);assert.equal(g.liteChooseTool(r.toolOptions[0]),true);assert.equal(g.liteRefreshReward(),false);
@@ -505,7 +505,7 @@ test('supply station supports selection before confirmation and changing choice'
  assert.equal(g.liteChooseTool(opt0),false);
 });
 test('shop repeats purchases with independent Fibonacci prices, keeps choices and persists prices across stages',()=>{
- const g=make();g.stage=3;const r=complete(g);assert.equal(r.shopOffers.length,8);assert.equal(r.shopOffers.filter(o=>o.kind==='tool').length,4);assert.equal(r.shopOffers.filter(o=>o.kind==='special').length,4);assert.equal(new Set(r.shopOffers.map(o=>o.kind+o.item)).size,8);
+ const g=make();g.stage=6;const r=complete(g);assert.equal(r.shopOffers.length,8);assert.equal(r.shopOffers.filter(o=>o.kind==='tool').length,4);assert.equal(r.shopOffers.filter(o=>o.kind==='special').length,4);assert.equal(new Set(r.shopOffers.map(o=>o.kind+o.item)).size,8);
  // SymPy: 5 * fibonacci(n + 2), n = 0..7.
  const prices=[5,10,15,25,40,65,105,170];
  for(const kind of ['tool','special']){
@@ -517,7 +517,7 @@ test('shop repeats purchases with independent Fibonacci prices, keeps choices an
   }
  }
  const untouched=r.shopOffers.find(o=>!g.lite.shopPurchases[o.kind==='special'?'block-'+o.item:o.item]);assert.equal(g.liteOfferPrice(untouched),5);assert.equal(r.settled,false);
- const offer=r.shopOffers[0],price=g.liteOfferPrice(offer);const h=make();h.phase=g.phase;h.lite=JSON.parse(JSON.stringify(g.lite));h.litePrepareReward();assert.equal(h.liteOfferPrice(offer),price);
+ const offer=r.shopOffers[0],price=g.liteOfferPrice(offer);const h=make();h.stage=g.stage;h.phase=g.phase;h.lite=JSON.parse(JSON.stringify(g.lite));h.litePrepareReward();assert.equal(h.liteOfferPrice(offer),price);
  assert.equal(h.liteChooseTool(r.toolOptions[0]),true);assert.equal(h.liteBuyOffer(offer.slot),false);assert.equal(h.liteNext(),true);complete(h);
  // Returning stock is priced by item identity, independent of its new slot.
  assert.equal(h.liteOfferPrice({...offer,slot:777}),price);h.reset();assert.equal(h.liteOfferPrice(offer),5);
@@ -539,10 +539,10 @@ test('shop purchases can occur across consecutive stages with stage coins and in
   assert.equal(g.stage,s);
   const r=complete(g);
   assert.equal(g.lite.coins>=5,true);
-  const offer=r.shopOffers.find(o=>o.kind==='tool');
+  const offer=r.shopOffers[0];
   const price=g.liteOfferPrice(offer);
-  const id=offer.item;
-  const initialTools=g.lite.tools[id];
+  const id=offer.kind==='special'?'block-'+offer.item:offer.item;
+  const initialTools=g.lite.tools[id]||0;
   g.lite.coins=Math.max(g.lite.coins,price);
   assert.equal(g.liteBuyOffer(offer.slot),true);
   assert.equal(g.lite.tools[id],initialTools+1);
@@ -621,16 +621,16 @@ test('blast clears every same-colour cell, adds compound snapshot bonus, and pay
  const g=make();g.stage=8;g.outline=null;g.checkpointScore=100;g.levelScore=100;g.score=500;
  g.board=[{x:4,y:0,id:g.id++,type:'L',liteHeavyBonus:12,liteCoin:true},{x:-1,y:0,id:g.id++,type:'L'},{x:1,y:0,id:g.id++,type:'T'}];
  const event=land(g,'blast');assert.equal(event.removed.length,3);assert(event.removed.every(c=>c.type==='L'));
- assert.equal(event.scoring.points,24);assert.equal(event.scoring.blastBonus,9);assert.equal(event.scoring.coinReward,3);
- assert.equal(g.lite.coins,3);assert.equal(g.score,524);assert.equal(g.checkpointScore,124);assert.equal(g.totalCleared,3);assert(g.board.every(c=>c.type==='T'));
- assert.equal(g.resolvePendingSpecial(),null);assert.equal(g.score,524);assert.equal(g.lite.coins,3);
+ assert.equal(event.scoring.points,20);assert.equal(event.scoring.blastBonus,5);assert.equal(event.scoring.coinReward,3);
+ assert.equal(g.lite.coins,3);assert.equal(g.score,520);assert.equal(g.checkpointScore,120);assert.equal(g.totalCleared,3);assert(g.board.every(c=>c.type==='T'));
+ assert.equal(g.resolvePendingSpecial(),null);assert.equal(g.score,520);assert.equal(g.lite.coins,3);
 });
 test('blast compounds from one snapshot and rounds only once including exact halves',()=>{
- // SymPy: floor(S*((103/100)**N-1)+1/2), independently verified.
- for(const [score,count,expected] of [[100,3,9],[45,3,4],[1000,10,344],[50,1,2],[5000,2,305],[0,10,0]])assert.equal(ctx.liteBlastBonus(score,count),expected);
+ // SymPy: floor(S*((1015/1000)**N-1)+1/2), independently verified.
+ for(const [score,count,expected] of [[100,3,5],[45,3,2],[1000,10,161],[50,1,1],[5000,2,151],[0,10,0]])assert.equal(ctx.liteBlastBonus(score,count),expected);
  const g=make();g.checkpointScore=1000;g.levelScore=1000;g.score=1000;g.board=Array.from({length:9},(_,i)=>({x:i+1,y:0,id:g.id++,type:'L'}));
  const expected=make().awardCells([...g.board,{x:0,y:1,type:'L',id:99}],'tool').points;
- const event=land(g,'blast');assert.equal(event.scoring.points,expected+344);assert.equal(g.checkpointScore,1000+expected+344);
+ const event=land(g,'blast');assert.equal(event.scoring.points,expected+161);assert.equal(g.checkpointScore,1000+expected+161);
 });
 test('glass block mirrors landing side blocks to the opposite side and only generated blocks become glass blocks',()=>{
  const g=make();
@@ -651,14 +651,17 @@ test('glass block mirrors landing side blocks to the opposite side and only gene
  assert.equal(rightMap.get('1,1')?.liteGlass,true);
  assert.equal(rightMap.get('3,3')?.liteGlass,undefined);
 
- // 2. Land on right side: mirrors right to left, overwriting conflicting target coordinates
+ // 2. Land on right side: mirrors right to left, without overwriting conflicting target coordinates
  const h=make();
  h.board=[{x:2,y:0,id:h.id++,type:'Z'},{x:-2,y:0,id:h.id++,type:'O'}];
  land(h,'glass',[[2,1]],'T');
  const leftCell=h.board.find(c=>c.x===-2&&c.y===0);
- assert.equal(leftCell?.type,'Z');
- assert.equal(leftCell?.liteGlass,true);
+ assert.equal(leftCell?.type,'O');
+ assert.equal(leftCell?.liteGlass,undefined);
  assert.equal(h.board.find(c=>c.x===2&&c.y===0)?.liteGlass,undefined);
+ const mirroredNew=h.board.find(c=>c.x===-2&&c.y===1);
+ assert.equal(mirroredNew?.type,'T');
+ assert.equal(mirroredNew?.liteGlass,true);
 
  // 3. 4-long bar dropped symmetrically does NOT trigger mirror effect or turn into glass
  const k=make();
@@ -773,10 +776,9 @@ test('heavy and coin metadata follow rotations, repacks, dye and save reload; ol
  const h=make();h.board=JSON.parse(JSON.stringify(g.board));h.lite=JSON.parse(JSON.stringify(g.lite));h.lite.heavyTurns={remaining:2,dir:1};h.liteEnsureExpansion();assert.equal(h.lite.heavyTurns,undefined);assert.equal(h.board.find(c=>c.id===id).liteHeavyBonus,12);assert.equal(h.board.find(c=>c.id===id).liteCoin,true);
 });
 test('supply grants rounded ten percent of current total limit, including previous grants',()=>{
- // SymPy half-up: 24/10 ->2;26/10 ->3;37/10 ->4;25/10 ->3.
- const g=make();g.liteGrantTool('supply',2);g.dropsUsed=20;assert.equal(g.liteUseTool('supply'),true);assert.equal(g.dropLimit,26);assert.equal(g.events.at(-1).amount,2);assert.equal(g.liteUseTool('supply'),true);assert.equal(g.dropLimit,29);assert.equal(g.events.at(-1).amount,3);
- const h=make();h.stage=7;h.liteGrantTool('supply');const initLimit=h.dropLimit,inc=Math.floor((initLimit+5)/10);assert.equal(h.liteUseTool('supply'),true);assert.equal(h.dropLimit,initLimit+inc);assert.equal(h.events.at(-1).amount,inc);
- const half=make();half.lite.extraDrops=1;half.liteGrantTool('supply');half.liteUseTool('supply');assert.equal(half.dropLimit,28);
+ const g=make();g.liteGrantTool('supply',2);g.dropsUsed=20;assert.equal(g.liteUseTool('supply'),true);assert.equal(g.dropLimit,29);assert.equal(g.events.at(-1).amount,5);assert.equal(g.liteUseTool('supply'),true);assert.equal(g.dropLimit,35);assert.equal(g.events.at(-1).amount,6);
+ const h=make();h.stage=7;h.liteGrantTool('supply');const initLimit=h.dropLimit,inc=3+Math.round(initLimit*0.1);assert.equal(h.liteUseTool('supply'),true);assert.equal(h.dropLimit,initLimit+inc);assert.equal(h.events.at(-1).amount,inc);
+ const half=make();half.lite.extraDrops=1;half.liteGrantTool('supply');half.liteUseTool('supply');assert.equal(half.dropLimit,31);
 });
 test('all six tools transform a real falling piece, consume inventory, trigger once on landing and settle',()=>{
  for(const {id} of ctx.ROTATION_LITE.specials){
@@ -860,73 +862,85 @@ test('a resumed run comes back to the outline it was left on',()=>{
 });
 
 test('tools and special blocks unlock progressively across stages in shop, drops, swap and rewards',()=>{
- // Stage 0 (第1关): only T1 (shovel, swap, block-patch, block-column)
+ // Stage 0 (第1关): only T1 (block-column, block-patch)
  const g0=make();assert.equal(g0.stage,0);
  const unlocked0=g0.liteUnlockedTools();
- assert.deepEqual(Array.from(unlocked0.map(t=>t.id)).sort(),['block-column','block-patch','shovel','swap'].sort());
+ assert.deepEqual(Array.from(unlocked0.map(t=>t.id)).sort(),['block-column','block-patch'].sort());
  const r0=complete(g0);
- assert.equal(r0.shopOffers.length,4);
- assert.equal(r0.shopOffers.filter(o=>o.kind==='tool').length,2);
+ assert.equal(r0.shopOffers.length,2);
+ assert.equal(r0.shopOffers.filter(o=>o.kind==='tool').length,0);
  assert.equal(r0.shopOffers.filter(o=>o.kind==='special').length,2);
- assert.equal(r0.toolOptions.length,3);
+ assert.equal(r0.toolOptions.length,2);
  assert(r0.toolOptions.every(id=>unlocked0.some(t=>t.id===id)));
- for(let i=0;i<10;i++){
-  g0.lite.tools.swap=1;g0.phase='play';g0.active={type:'T',color:'T'};
-  g0.liteUseTool('swap');
-  assert(g0.lite.tools['block-patch']>0||g0.lite.tools['block-column']>0);
-  assert.equal(g0.lite.tools['block-glass']||0,0);
-  assert.equal(g0.lite.tools['block-blast']||0,0);
- }
 
- // Stage 1 (第2关): T1 + T2 (+supply, block-glass, block-heavy) -> 7 items
- const g1=make();g1.stage=1;
- const unlocked1=g1.liteUnlockedTools();
- assert.equal(unlocked1.length,7);
- const r1=complete(g1);
- assert.equal(r1.shopOffers.length,7);
- assert.equal(r1.shopOffers.filter(o=>o.kind==='tool').length,3);
- assert.equal(r1.shopOffers.filter(o=>o.kind==='special').length,4);
- assert(r1.toolOptions.every(id=>unlocked1.some(t=>t.id===id)));
-
- // Stage 2 (第3关): +repair, block-pack -> 9 items (shop offers 8)
+ // Stage 2 (第3关): +supply, block-heavy -> 4 items
  const g2=make();g2.stage=2;
  const unlocked2=g2.liteUnlockedTools();
- assert.equal(unlocked2.length,9);
+ assert.equal(unlocked2.length,4);
  const r2=complete(g2);
- assert.equal(r2.shopOffers.length,8);
- assert.equal(r2.shopOffers.filter(o=>o.kind==='tool').length,4);
- assert.equal(r2.shopOffers.filter(o=>o.kind==='special').length,4);
+ assert.equal(r2.shopOffers.length,4);
+ assert.equal(r2.shopOffers.filter(o=>o.kind==='tool').length,1);
+ assert.equal(r2.shopOffers.filter(o=>o.kind==='special').length,3);
+ assert.equal(r2.toolOptions.length,3);
+ assert(r2.toolOptions.every(id=>unlocked2.some(t=>t.id===id)));
 
- // Stage 3+ (第4关及以后): all 12 items
+ // Stage 3 (第4关): +shovel, block-pack -> 6 items
  const g3=make();g3.stage=3;
- assert.equal(g3.liteUnlockedTools().length,12);
+ const unlocked3=g3.liteUnlockedTools();
+ assert.equal(unlocked3.length,6);
  const r3=complete(g3);
- assert.equal(r3.shopOffers.length,8);
+ assert.equal(r3.shopOffers.length,6);
+ assert.equal(r3.shopOffers.filter(o=>o.kind==='tool').length,2);
+ assert.equal(r3.shopOffers.filter(o=>o.kind==='special').length,4);
+
+ // Stage 4 (第5关): +repair, block-glass -> 8 items
+ const g4=make();g4.stage=4;
+ assert.equal(g4.liteUnlockedTools().length,8);
+
+ // Stage 5 (第6关): +swap, block-diamond -> 10 items
+ const g5=make();g5.stage=5;
+ const unlocked5=g5.liteUnlockedTools();
+ assert.equal(unlocked5.length,10);
+ for(let i=0;i<10;i++){
+  g5.lite.tools.swap=1;g5.phase='play';g5.active={type:'T',color:'T'};
+  g5.liteUseTool('swap');
+  assert.equal(g5.lite.tools['block-blast']||0,0);
+ }
+
+ // Stage 6+ (第7关及以后): all 12 items
+ const g6=make();g6.stage=6;
+ assert.equal(g6.liteUnlockedTools().length,12);
+ const r6=complete(g6);
+ assert.equal(r6.shopOffers.length,8);
 });
 
 test('unseen shop tools track unlocks, trigger badge, and persist once seen',()=>{
- // Stage 0: default 4 items are already seen, no unseen tools
+ // Stage 0: default 2 items are already seen, no unseen tools
  const g=make();
  assert.equal(g.stage,0);
- assert.deepEqual(Array.from(g.lite.seenShopTools).sort(),['block-column','block-patch','shovel','swap'].sort());
+ assert.deepEqual(Array.from(g.lite.seenShopTools).sort(),['block-column','block-patch'].sort());
  assert.equal(g.liteUnseenShopTools().length,0);
 
- // Advance to Stage 1: supply, block-glass, block-heavy are unlocked and unseen
+ // Advance to Stage 1: still only block-column and block-patch
  g.stage=1;
- const unseen1=g.liteUnseenShopTools();
- assert.equal(unseen1.length,3);
- assert.deepEqual(Array.from(unseen1.map(t=>t.id)).sort(),['block-heavy','block-glass','supply'].sort());
-
- // Mark unseen as seen
- const marked1=g.liteMarkShopToolsSeen(unseen1.map(t=>t.id));
- assert.equal(marked1.length,3);
  assert.equal(g.liteUnseenShopTools().length,0);
 
- // Advance to Stage 2: repair, block-pack unlocked and unseen
+ // Advance to Stage 2: supply, block-heavy are unlocked and unseen
  g.stage=2;
  const unseen2=g.liteUnseenShopTools();
  assert.equal(unseen2.length,2);
- assert.deepEqual(Array.from(unseen2.map(t=>t.id)).sort(),['block-pack','repair'].sort());
+ assert.deepEqual(Array.from(unseen2.map(t=>t.id)).sort(),['block-heavy','supply'].sort());
+
+ // Mark unseen as seen
+ const marked2=g.liteMarkShopToolsSeen(unseen2.map(t=>t.id));
+ assert.equal(marked2.length,2);
+ assert.equal(g.liteUnseenShopTools().length,0);
+
+ // Advance to Stage 3: shovel, block-pack unlocked and unseen
+ g.stage=3;
+ const unseen3=g.liteUnseenShopTools();
+ assert.equal(unseen3.length,2);
+ assert.deepEqual(Array.from(unseen3.map(t=>t.id)).sort(),['block-pack','shovel'].sort());
 
  // Save and restore preserves seenShopTools
  const saved=JSON.parse(JSON.stringify(g));
@@ -937,17 +951,46 @@ test('unseen shop tools track unlocks, trigger badge, and persist once seen',()=
  restored.liteMarkShopToolsSeen();
  assert.equal(restored.liteUnseenShopTools().length,0);
 
- // Advance to Stage 3: dye, block-blast, block-diamond unlocked and unseen
- restored.stage=3;
- const unseen3=restored.liteUnseenShopTools();
- assert.equal(unseen3.length,3);
- assert.deepEqual(Array.from(unseen3.map(t=>t.id)).sort(),['block-blast','block-diamond','dye'].sort());
+ // Advance to Stage 4: repair, block-glass unlocked and unseen
+ restored.stage=4;
+ const unseen4=restored.liteUnseenShopTools();
+ assert.equal(unseen4.length,2);
+ assert.deepEqual(Array.from(unseen4.map(t=>t.id)).sort(),['block-glass','repair'].sort());
  restored.liteMarkShopToolsSeen();
  assert.equal(restored.liteUnseenShopTools().length,0);
 
- // Advance to Stage 4+: no more tools to unlock
- restored.stage=4;
+ // Advance to Stage 5: swap, block-diamond unlocked and unseen
+ restored.stage=5;
+ const unseen5=restored.liteUnseenShopTools();
+ assert.equal(unseen5.length,2);
+ assert.deepEqual(Array.from(unseen5.map(t=>t.id)).sort(),['block-diamond','swap'].sort());
+ restored.liteMarkShopToolsSeen();
  assert.equal(restored.liteUnseenShopTools().length,0);
+
+ // Advance to Stage 6: dye, block-blast unlocked and unseen
+ restored.stage=6;
+ const unseen6=restored.liteUnseenShopTools();
+ assert.equal(unseen6.length,2);
+ assert.deepEqual(Array.from(unseen6.map(t=>t.id)).sort(),['block-blast','dye'].sort());
+ restored.liteMarkShopToolsSeen();
+ assert.equal(restored.liteUnseenShopTools().length,0);
+
+ // Advance to Stage 7+: no more tools to unlock
+ restored.stage=7;
+ assert.equal(restored.liteUnseenShopTools().length,0);
+});
+
+test('shovel tool spreads outward ring up to 24 cells, respecting dominant color bias',()=>{
+ const g=make();
+ g.board=[{x:0,y:1,type:'T',id:g.id++},{x:1,y:1,type:'T',id:g.id++},{x:0,y:2,type:'T',id:g.id++}];
+ g.liteGrantTool('shovel',1);
+ assert.equal(g.liteUseTool('shovel'),true);
+ const event=g.events.find(e=>e.kind==='lite-tool'&&e.tool==='shovel');
+ assert(event);
+ assert(event.amount <= 24);
+ assert(event.spreadCells.length <= 24);
+ assert(['cw','ccw'].includes(event.direction));
+ assert.equal(g.liteDyeColor(),'T');
 });
 
 test('liteBlockFx creates glassMesh with procedural glass material and updates instances without dark backing',()=>{
