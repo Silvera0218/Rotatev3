@@ -305,8 +305,8 @@ html[data-v3] #overlay[data-home=true][data-v3-home=true] #v3-home-drop{display:
 
 html.arcade-ui[data-lite][data-v3] #score-feedback[data-diamond=true] #feedback-multiplier{display:block!important;color:#b9f7ff!important}
 html[data-v3] #lite-stage-clear{pointer-events:auto;cursor:pointer;user-select:none;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
-html[data-v3] #goal-track[data-overcharge="true"]{background:rgba(16,42,88,.48)!important;border-color:#d8ff66!important;box-shadow:0 0 8px rgba(196,255,23,.45)!important;overflow:visible!important}
+html[data-v3] #goal-track[data-overcharge="true"]{background:transparent!important;border-color:transparent!important;box-shadow:none!important;overflow:visible!important}
 html[data-v3] #goal-track[data-overcharge="true"] #bar{opacity:0!important}
-html[data-v3] .stage-progress:has(#goal-track[data-overcharge="true"]) #level-score{color:#d8ff4b!important;text-shadow:0 0 8px rgba(196,255,23,.75),1px 2px #143672!important}
+html[data-v3] .stage-progress:has(#goal-track[data-overcharge="true"]) #level-score{display:inline-block;transform-origin:center bottom;color:#d8ff4b!important;text-shadow:0 0 8px rgba(196,255,23,.75),1px 2px #143672!important}
 html[data-v3] .stage-progress:has(#goal-track[data-overcharge-tier="1"]) #level-score{color:#ffe65c!important;text-shadow:0 0 10px rgba(255,226,79,.85),1px 2px #143672!important}
-html[data-v3] .stage-progress:has(#goal-track[data-overcharge-tier="2"]) #level-score{color:#ffffff!important;text-shadow:0 0 12px rgba(94,242,255,.95),0 0 20px rgba(255,112,216,.8),1px 2px #143672!important}
+html[data-v3] .stage-progress:has(#goal-track[data-overcharge-tier="2"]) #level-score{color:#ffffff!important;text-shadow:0 0 12px rgba(196,255,23,.9),0 0 18px rgba(101,234,255,.75),1px 2px #143672!important}

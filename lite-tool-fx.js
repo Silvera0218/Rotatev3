@@ -357,8 +357,8 @@ globalThis.createRotationToolFx = function({ stage, rail, THREE }) {
         float breachFlash = clamp(uState.z, 0.0, 1.0);
 
         // Normalized heat tiers:
-        // goldMix: 0 -> 1 across overflowRatio [0.08 .. 0.35]
-        // prismMix: 0 -> 1 across overflowRatio [0.35 .. 0.70]
+        // goldMix: 0 -> 1 across overflowRatio [0.06 .. 0.32]
+        // prismMix: 0 -> 1 across overflowRatio [0.32 .. 0.68]
         float goldMix = smoothstep(0.06, 0.32, overflowRatio);
         float prismMix = smoothstep(0.32, 0.68, overflowRatio);
         float heat = clamp(overflowRatio / 0.55, 0.0, 1.0);
@@ -372,77 +372,92 @@ globalThis.createRotationToolFx = function({ stage, rail, THREE }) {
         float barH = max(5.0, uBarSize.y);
         float xNorm = clamp(px / barW, 0.0, 1.0);
 
+        // Smooth UV boundary feather so glow NEVER touches the quad edge (zero texture seam)
+        float uvFadeX = smoothstep(0.0, 0.16, vUv.x) * smoothstep(1.0, 0.84, vUv.x);
+        float uvFadeY = smoothstep(0.0, 0.22, vUv.y) * smoothstep(1.0, 0.78, vUv.y);
+        float uvFade = uvFadeX * uvFadeY;
+
         // High-speed charge packets racing from left (0.0) to right (1.0)
-        float waveSpeed = 3.6 + 1.8 * heat;
+        float waveSpeed = 3.8 + 1.8 * heat;
         float packetPhase = fract(xNorm * 1.65 - uTime * waveSpeed);
         float packetCrest = pow(1.0 - packetPhase, 2.8) * smoothstep(0.0, 0.12, packetPhase);
         float fastWave = 0.5 + 0.5 * sin(xNorm * 16.0 - uTime * 34.0);
 
         // Right-end impact zone (where waves slam into the 100% cap and bulge out)
-        float headZone = smoothstep(0.68, 1.0, xNorm);
+        float headZone = smoothstep(0.72, 1.0, xNorm);
 
         // Elastic vertical jitter ("突突" vibration, stronger toward right tip)
-        float jitterAmp = (0.55 + 1.15 * headZone) * chugPulse * (0.65 + 0.55 * heat);
-        float yJitter = sin(uTime * 82.0 + xNorm * 10.0) * jitterAmp;
+        float jitterAmp = (0.40 + 0.90 * headZone) * chugPulse * (0.65 + 0.50 * heat);
+        float yJitter = sin(uTime * 84.0 + xNorm * 11.0) * jitterAmp;
 
         // Right tip punches/juts outward on every chug beat
-        float rightTipX = barW + (3.2 + 5.2 * heat) * chugPulse + 1.4 * fastWave * chugPulse;
+        float rightTipX = barW + (2.8 + 4.2 * heat) * chugPulse + 1.2 * fastWave * chugPulse;
 
-        // Bar half-thickness with traveling wave swell + right-end bulge
-        float baseHalfH = barH * 0.56;
-        float barPump = 1.0 + (0.26 + 0.20 * heat) * chugPulse;
-        float waveSwell = 1.0 + 0.28 * packetCrest * smoothstep(0.08, 0.92, xNorm);
-        float tipSwell = 1.0 + (0.85 + 0.55 * heat) * (0.30 + 0.70 * chugPulse) * pow(headZone, 1.6);
+        // Bar half-thickness with traveling wave swell + compact right-end nozzle bulge
+        float baseHalfH = barH * 0.50;
+        float barPump = 1.0 + (0.18 + 0.14 * heat) * chugPulse;
+        float waveSwell = 1.0 + 0.22 * packetCrest * smoothstep(0.08, 0.92, xNorm);
+        float tipSwell = 1.0 + (0.55 + 0.35 * heat) * (0.28 + 0.72 * chugPulse) * pow(headZone, 1.8);
         float localRadius = baseHalfH * barPump * waveSwell * tipSwell;
 
         // Distance to deformed bar spine
         float clampedX = clamp(px, 0.0, rightTipX);
         float dBar = length(vec2(px - clampedX, py - yJitter)) - localRadius;
 
-        // Dedicated pulsing energy bulb at the right tip ("突突"鼓包头)
-        float knotCenterX = rightTipX - 2.5;
-        float knotRadius = baseHalfH * (1.35 + (1.15 + 0.65 * heat) * chugPulse + 0.35 * breachFlash);
-        float dKnot = length(vec2((px - knotCenterX) * 0.78, py - yJitter)) - knotRadius;
+        // Compact pulsing energy nozzle at the right tip ("突突"喷嘴鼓包)
+        float knotCenterX = rightTipX - 2.0;
+        float knotRadius = baseHalfH * (1.15 + (0.85 + 0.45 * heat) * chugPulse + 0.25 * breachFlash);
+        float dKnot = length(vec2((px - knotCenterX) * 0.82, py - yJitter)) - knotRadius;
 
-        float d = smin(dBar, dKnot, 3.2);
+        float d = smin(dBar, dKnot, 2.4);
 
-        // Crisp core mask and multi-layered outer plasma glow
-        float coreMask = 1.0 - smoothstep(-0.8, 0.9, d);
+        // Crisp core mask and finite-support Gaussian outer glow (strictly 0 before quad edge)
+        float coreMask = 1.0 - smoothstep(-0.7, 0.8, d);
         float innerHighlight = 1.0 - smoothstep(-localRadius * 0.85, -localRadius * 0.15, d);
-        float rimGlow = exp(-max(0.0, d) / (3.2 + 2.8 * chugPulse + 2.2 * heat)) * (0.65 + 0.45 * chugPulse);
-        float headFlare = exp(-length(vec2((px - knotCenterX) * 0.55, py - yJitter)) / (9.5 + 8.5 * chugPulse + 6.0 * breachFlash))
-                          * (0.55 + 0.65 * chugPulse + 0.85 * breachFlash);
 
-        float alpha = clamp(coreMask + rimGlow * 0.78 + headFlare * 0.85, 0.0, 1.0);
-        if (alpha <= 0.004) discard;
+        float rimMaxDist = 14.0 + 6.0 * chugPulse + 4.0 * heat;
+        float rimNorm = clamp(max(0.0, d) / rimMaxDist, 0.0, 1.0);
+        float rimGlow = exp(-rimNorm * rimNorm * 5.5) * (1.0 - rimNorm) * (0.52 + 0.38 * chugPulse);
 
-        // Diagonal >>> energy chevrons racing rightward inside the bar
-        float chevronCoord = (px * 0.26 - abs(py - yJitter) * 0.75 - uTime * (26.0 + 10.0 * heat));
-        float chevron = smoothstep(-0.2, 0.35, sin(chevronCoord));
+        float flareDist = length(vec2((px - knotCenterX) * 0.68, py - yJitter));
+        float flareMaxDist = 22.0 + 10.0 * chugPulse + 6.0 * breachFlash;
+        float flareNorm = clamp(flareDist / flareMaxDist, 0.0, 1.0);
+        float headFlare = exp(-flareNorm * flareNorm * 5.0) * (1.0 - flareNorm)
+                          * (0.42 + 0.52 * chugPulse + 0.60 * breachFlash);
 
-        // Color Palette Progression:
+        float alpha = clamp(coreMask + (rimGlow * 0.72 + headFlare * 0.78) * uvFade, 0.0, 1.0);
+        if (alpha <= 0.002) discard;
+
+        // Diagonal >>> energy chevrons pointing RIGHT (+abs(py)) and racing left-to-right
+        float chevronCoord = (px * 0.28 + abs(py - yJitter) * 0.82 - uTime * (26.0 + 10.0 * heat));
+        float chevron = smoothstep(-0.18, 0.38, sin(chevronCoord));
+
+        // Color Palette Progression (Game-authentic Lime -> Gold -> Ice-Cyan/White):
         // 1. Lime (#c4ff17)
         vec3 limeBase = vec3(0.769, 1.000, 0.090);
         vec3 limeBright = vec3(0.945, 1.000, 0.580);
         // 2. Radiant Gold (#ffcc24 -> #ffe875)
-        vec3 goldBase = vec3(1.000, 0.760, 0.120);
-        vec3 goldBright = vec3(1.000, 0.940, 0.520);
-        // 3. Prismatic Neon + Incandescent White
-        vec3 prismWave = 0.55 + 0.45 * cos(6.28318 * (xNorm * 1.35 - uTime * 3.2 + vec3(0.0, 0.33, 0.67)));
-        vec3 prismBase = mix(prismWave, vec3(1.0, 0.92, 0.35), 0.25);
+        vec3 goldBase = vec3(1.000, 0.780, 0.140);
+        vec3 goldBright = vec3(1.000, 0.950, 0.560);
+        // 3. Overdrive Cyan-Gold-White
+        vec3 prismWave = mix(
+          vec3(0.380, 0.940, 1.000),
+          vec3(1.000, 0.900, 0.320),
+          0.5 + 0.5 * sin(6.28318 * (xNorm * 1.25 - uTime * 3.0))
+        );
 
         vec3 bodyCol = mix(limeBase, goldBase, goldMix);
-        bodyCol = mix(bodyCol, prismBase, prismMix);
+        bodyCol = mix(bodyCol, prismWave, prismMix * 0.75);
 
         vec3 brightCol = mix(limeBright, goldBright, goldMix);
         brightCol = mix(brightCol, vec3(1.0, 1.0, 1.0), prismMix * 0.85);
 
         // Combine chevron stripes, traveling charge packet, and right-tip white-hot compression
-        float energyBand = clamp(0.35 * chevron + 0.55 * packetCrest + 0.45 * innerHighlight, 0.0, 1.0);
+        float energyBand = clamp(0.38 * chevron + 0.52 * packetCrest + 0.42 * innerHighlight, 0.0, 1.0);
         vec3 col = mix(bodyCol, brightCol, energyBand);
 
         // White-hot flash at the right bulge during each chug pulse & initial breach
-        float whiteHot = clamp(headZone * (0.45 * chugPulse + 0.35 * packetCrest) + headFlare * 0.65 + breachFlash * 0.75, 0.0, 1.0);
+        float whiteHot = clamp(headZone * (0.45 * chugPulse + 0.35 * packetCrest) + headFlare * 0.60 + breachFlash * 0.70, 0.0, 1.0);
         col = mix(col, vec3(1.0, 1.0, 0.96), whiteHot);
 
         gl_FragColor = vec4(col, alpha);
@@ -468,17 +483,16 @@ globalThis.createRotationToolFx = function({ stage, rail, THREE }) {
 
   const GOLD_PALETTE = [
     [1.000, 0.890, 0.310], // #ffe24f radiant gold
-    [1.000, 0.740, 0.120], // #ffbd1f deep gold
-    [1.000, 0.965, 0.720], // #fff6b8 white-gold
     [0.769, 1.000, 0.090], // #c4ff17 lime accent
+    [1.000, 0.965, 0.720], // #fff6b8 white-gold
+    [0.960, 0.995, 1.000], // #f5feff crisp white
   ];
 
   const PRISM_PALETTE = [
     [1.000, 1.000, 1.000], // pure white
-    [1.000, 0.890, 0.310], // #ffe24f solar gold
-    [0.224, 0.950, 1.000], // #39f2ff electric cyan
-    [1.000, 0.380, 0.760], // #ff61c2 neon magenta
     [0.769, 1.000, 0.090], // #c4ff17 lime
+    [1.000, 0.890, 0.310], // #ffe24f solar gold
+    [0.396, 0.918, 1.000], // #65eaff ice cyan
   ];
 
   // Active effect state
@@ -515,32 +529,33 @@ globalThis.createRotationToolFx = function({ stage, rail, THREE }) {
 
     const heat = Math.min(1.0, Math.max(0.0, ratio / 0.5));
     const count = isBreach
-      ? (reduced ? 6 : 16)
-      : (2 + Math.floor(Math.random() * 3) + (heat > 0.35 ? 2 : 0));
+      ? (reduced ? 5 : 12)
+      : (2 + Math.floor(Math.random() * 2) + (heat > 0.35 ? 1 : 0));
 
     for (let i = 0; i < count; i++) {
       if (particles.length >= maxParticles) particles.shift();
 
       const r = Math.random();
-      const pType = r < 0.52 ? 0 : (r < 0.84 ? 1 : 2);
+      // Keep nozzle particles as crisp pixel cubes (type 0 and type 1)
+      const pType = r < 0.55 ? 0 : 1;
 
-      // Eject primarily from the right tip (85%..100% of bar width), fan outward to the right/up/down
-      const alongRight = isBreach ? (0.75 + Math.random() * 0.25) : (0.86 + Math.random() * 0.16);
+      // Eject from the right nozzle tip of the bar
+      const alongRight = isBreach ? (0.85 + Math.random() * 0.15) : (0.94 + Math.random() * 0.08);
       const px = tx + barW * alongRight;
-      const py = ty + (Math.random() - 0.5) * (barH + 6);
+      const py = ty + (Math.random() - 0.5) * (barH + 2);
 
-      // Fan angle centered slightly rightward (-75deg .. +75deg), with occasional upward/leftward sparks
-      const spreadAngle = (Math.random() - 0.5) * Math.PI * (isBreach ? 1.65 : 1.15);
-      const speedBase = isBreach ? 115 : (68 + 65 * heat);
-      const speed = speedBase + Math.random() * (isBreach ? 120 : 85);
+      // Tight nozzle spray cone to the right (-42deg .. +42deg)
+      const spreadAngle = (Math.random() - 0.5) * Math.PI * (isBreach ? 0.72 : 0.46);
+      const speedBase = isBreach ? 95 : (72 + 55 * heat);
+      const speed = speedBase + Math.random() * (isBreach ? 90 : 68);
 
-      const vx = Math.cos(spreadAngle) * speed + (isBreach ? 15 : 28);
-      const vy = Math.sin(spreadAngle) * speed - 18;
+      const vx = Math.cos(spreadAngle) * speed + 24;
+      const vy = Math.sin(spreadAngle) * speed - 12;
 
       const baseSize = pType === 0
-        ? (5.5 + Math.random() * 4.5 + heat * 1.5)
-        : (pType === 1 ? (3.5 + Math.random() * 2.5) : (8.0 + Math.random() * 4.0));
-      const life = isBreach ? (0.45 + Math.random() * 0.28) : (0.28 + Math.random() * 0.22);
+        ? (4.0 + Math.random() * 2.8 + heat * 0.8)
+        : (2.6 + Math.random() * 2.0);
+      const life = isBreach ? (0.34 + Math.random() * 0.20) : (0.22 + Math.random() * 0.16);
 
       particles.push({
         x: px,
@@ -548,7 +563,7 @@ globalThis.createRotationToolFx = function({ stage, rail, THREE }) {
         vx,
         vy,
         rotZ: Math.random() * Math.PI * 2,
-        vRotZ: (Math.random() - 0.5) * 9.0,
+        vRotZ: (Math.random() - 0.5) * 8.0,
         baseSize,
         type: pType,
         seed: Math.random(),
@@ -557,27 +572,20 @@ globalThis.createRotationToolFx = function({ stage, rail, THREE }) {
         maxLife: life
       });
     }
-
-    if (isBreach) {
-      ripples.push({
-        x: tx + barW,
-        y: ty,
-        age: 0,
-        maxLife: reduced ? 0.35 : 0.55,
-        maxRadius: reduced ? 52 : 88
-      });
-      if (ripples.length > maxRipples) ripples.shift();
-    }
   }
 
   function pulseScoreDigits(ratio, isBreach = false) {
     const scoreNode = stage.querySelector('#level-score');
     if (!scoreNode || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     const heat = Math.min(1.0, Math.max(0.0, ratio / 0.5));
-    const scalePeak = isBreach ? 1.34 : (1.14 + 0.14 * heat);
-    const jitterX = (Math.random() - 0.5) * (2.5 + 2.5 * heat);
-    const jitterY = -(1.5 + 2.0 * heat);
-    scoreNode.style.transform = `translate(${jitterX.toFixed(1)}px, ${jitterY.toFixed(1)}px) scale(${scalePeak.toFixed(2)})`;
+    const pulse = Math.min(1.3, Math.max(0.0, overcharge.chugPulse));
+    if (pulse <= 0.02 && !isBreach) {
+      scoreNode.style.transform = '';
+      return;
+    }
+    const scalePeak = 1.0 + (isBreach ? 0.24 : (0.10 + 0.08 * heat)) * pulse;
+    const liftY = -(1.8 + 1.4 * heat) * pulse;
+    scoreNode.style.transform = `translateY(${liftY.toFixed(1)}px) scale(${scalePeak.toFixed(3)})`;
   }
 
   function triggerChugBeat(isBreach = false) {
@@ -855,8 +863,9 @@ globalThis.createRotationToolFx = function({ stage, rail, THREE }) {
           triggerChugBeat(false);
         }
 
-        overcharge.chugPulse = Math.max(0, overcharge.chugPulse - dt * 9.5);
-        overcharge.breachFlash = Math.max(0, overcharge.breachFlash - dt * 3.8);
+        overcharge.chugPulse = Math.max(0, overcharge.chugPulse - dt * 13.5);
+        overcharge.breachFlash = Math.max(0, overcharge.breachFlash - dt * 4.2);
+        pulseScoreDigits(overcharge.overflowRatio, false);
 
         const tRect = trackEl.getBoundingClientRect();
         const barX = tRect.left - sRect.left;
@@ -864,9 +873,9 @@ globalThis.createRotationToolFx = function({ stage, rail, THREE }) {
         const barW = Math.max(10, tRect.width);
         const barH = Math.max(5, tRect.height);
 
-        const padLeft = 18;
-        const padRight = 38;
-        const padY = 26;
+        const padLeft = 56;
+        const padRight = 84;
+        const padY = 64;
         const quadW = barW + padLeft + padRight;
         const quadH = barH + padY * 2;
         const cx = barX - padLeft + quadW * 0.5;
