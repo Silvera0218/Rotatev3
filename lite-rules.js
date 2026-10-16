@@ -3,13 +3,13 @@
   'use strict';
   const BUFFS = [];
   const SPECIALS = [
-    {id:'column',unlockStage:0,basePrice:5,name:'变色方块',description:'落地后将所在列染成同色'},
-    {id:'patch',unlockStage:0,basePrice:5,name:'金币方块',description:'消除时按消除格数得金币'},
-    {id:'pack',unlockStage:5,basePrice:7,name:'强迫症方块',description:'消耗自身将方块向内重排'},
-    {id:'heavy',unlockStage:5,basePrice:8,name:'超重方块',description:'消除下方整列并向内聚拢'},
-    {id:'glass',unlockStage:6,basePrice:8,name:'玻璃方块',description:'将一侧方块镜像至另一侧'},
-    {id:'diamond',unlockStage:6,basePrice:10,name:'钻石方块',description:'标记全场同色，消除分×3'},
-    {id:'blast',unlockStage:7,basePrice:12,name:'爆炸方块',description:'全消同色，每格加分3%'}
+    {id:'column',unlockStage:2,basePrice:5,name:'变色方块',description:'落地后将所在列染成同色'},
+    {id:'patch',unlockStage:4,basePrice:5,name:'金币方块',description:'消除时按消除格数得金币'},
+    {id:'pack',unlockStage:6,basePrice:7,name:'强迫症方块',description:'消耗自身将方块向内重排'},
+    {id:'heavy',unlockStage:7,basePrice:8,name:'超重方块',description:'消除下方整列并向内聚拢'},
+    {id:'glass',unlockStage:8,basePrice:8,name:'玻璃方块',description:'将一侧方块镜像至另一侧'},
+    {id:'diamond',unlockStage:9,basePrice:10,name:'钻石方块',description:'标记全场同色，消除分×3'},
+    {id:'blast',unlockStage:10,basePrice:12,name:'爆炸方块',description:'全消同色，每格加分3%'}
   ];
   const BASE_RULES = Object.freeze({
     // The original engine has ten procedural stages, but the lightweight
@@ -28,7 +28,7 @@
       { id: 'dye', unlockStage: 0, basePrice: 3, name: '调色瓶', description: '当前落块染成最多颜色' },
       { id: 'repair', unlockStage: 0, basePrice: 4, name: '生命之心', description: '恢复1次容错，上限3次' },
       { id: 'supply', unlockStage: 0, basePrice: 6, name: '补给箱', description: '增加本关可用投放次数' },
-      { id: 'swap', unlockStage: 0, basePrice: 6, name: '换块', description: '随机获得一个特殊方块' },
+      { id: 'swap', unlockStage: 3, basePrice: 6, name: '换块', description: '随机获得一个特殊方块' },
       { id: 'shovel', unlockStage: 5, basePrice: 8, name: '蔓延', description: '沿已有方块外围扩充一圈' },
       ...SPECIALS.map(block=>({id:'block-'+block.id,unlockStage:block.unlockStage??0,basePrice:block.basePrice??5,name:block.name,blockEffect:block.id,description:block.description,detail:block.detail}))
     ],
@@ -387,7 +387,7 @@
       }
       for(const offer of roll?.shopOffers||[])delete offer.sold;
       if(!Array.isArray(this.lite.seenShopTools)){
-        this.lite.seenShopTools = ['block-column', 'block-patch', 'supply', 'repair', 'swap', 'dye'];
+        this.lite.seenShopTools = ['dye', 'repair', 'supply'];
       }
       this.lite.acquiredTools ||= [];
       for(const [id, count] of Object.entries(this.lite.tools||{})){
@@ -490,7 +490,7 @@
     };
     p.reset = function (shapeSeed = 42, rewardSeed = shapeSeed) {
       this.lite = {
-        toolOrder: ['swap'], coins: 0, tools: { ...emptyTools(), swap: 1 }, acquiredTools: ['swap'], shopPurchases: {}, seenShopTools: ['block-column', 'block-patch', 'supply', 'repair', 'swap', 'dye'], extraDrops: 0, buffs: [], specials: [], specialToolsMigrated:true, lastPlacementIds: [], clears: 0,
+        toolOrder: [], coins: 0, tools: emptyTools(), acquiredTools: [], shopPurchases: {}, seenShopTools: ['dye', 'repair', 'supply'], extraDrops: 0, buffs: [], specials: [], specialToolsMigrated:true, lastPlacementIds: [], clears: 0,
         roll: null, clearCoinStage:-1, zeroDropKey:null, phaseIndex:0, seed: (rewardSeed ^ 0x6a09e667) >>> 0
       };
       const result = original.reset.call(this, shapeSeed, rewardSeed);
@@ -1130,7 +1130,8 @@
         this.deadlockCells = []; this.deadlockWarning = null;
         this.build.revision++;
       } else if (type === 'swap') {
-        const specials=this.liteUnlockedTools().filter(tool=>tool.blockEffect);
+        const unlockedSpecials=this.liteUnlockedTools().filter(tool=>tool.blockEffect);
+        const specials=unlockedSpecials.length?unlockedSpecials:RULES.tools.filter(tool=>tool.id==='block-column');
         const block=specials[Math.floor(this.liteRandom()*specials.length)];
         const id='block-'+block.blockEffect;
         this.liteGrantTool(id);
@@ -1164,7 +1165,11 @@
       const options=[];
       if(ordinary.length)options.push(ordinary[0]);
       if(special.length)options.push(special[0]);
-      const remaining=shuffle([...ordinary.slice(1),...special.slice(1)]);
+      if(!previous.length&&!this.endless&&this.stage>=2){
+        const newlyUnlocked=pool.find(t=>t.unlockStage===this.stage);
+        if(newlyUnlocked&&!options.includes(newlyUnlocked.id))options.push(newlyUnlocked.id);
+      }
+      const remaining=shuffle([...ordinary.slice(1),...special.slice(1)].filter(id=>!options.includes(id)));
       while(options.length<3&&remaining.length){
         const candidate=remaining.find(id=>!previous.includes(id)&&!options.includes(id))??remaining.find(id=>!options.includes(id))??remaining[0];
         options.push(candidate);
@@ -1220,8 +1225,17 @@
     p.liteCreateShop = function () {
       const shuffle=items=>{for(let i=items.length-1;i>0;i--){const j=Math.floor(this.liteRandom()*(i+1));[items[i],items[j]]=[items[j],items[i]];}return items;};
       const pool=this.liteUnlockedTools();
-      const normal=shuffle(pool.filter(t=>!t.blockEffect)).slice(0,4);
-      const special=shuffle(pool.filter(t=>t.blockEffect)).slice(0,4);
+      const pickWithNew=list=>{
+        const shuffled=shuffle(list);
+        const picked=shuffled.slice(0,4);
+        if(!this.endless&&this.stage>=2){
+          const newly=shuffled.find(t=>t.unlockStage===this.stage);
+          if(newly&&!picked.includes(newly)&&picked.length>=4)picked[picked.length-1]=newly;
+        }
+        return picked;
+      };
+      const normal=pickWithNew(pool.filter(t=>!t.blockEffect));
+      const special=pickWithNew(pool.filter(t=>t.blockEffect));
       return shuffle([...normal,...special]).map((tool,slot)=>({slot,kind:tool.blockEffect?'special':'tool',item:tool.blockEffect||tool.id}));
     };
     p.liteBuyOffer = function (slot, quantity=1) {

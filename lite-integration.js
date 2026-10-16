@@ -417,6 +417,7 @@ function liteCreateReward(){
     button.onclick=()=>{L.lite.roll.shopCategory=id;liteUpdateReward();liteSaveSafe();};I('lite-shop-categories').append(button);
   }
   I('v3-shop-open').onclick=()=>{
+    if(!L.endless&&L.stage<2)return;
     if(L.lite.roll.adReadyAt)return;
     const unseen=L.liteUnseenShopTools?L.liteUnseenShopTools():[];
     if(unseen.length>0){
@@ -449,6 +450,7 @@ function liteCreateReward(){
       liteContinueAfterReward(I('lite-refresh-reward'),event);
       return;
     }
+    if(!L.endless&&L.stage<2)return;
     const changed=r.freeRefreshes>0?L.liteRefreshReward():L.liteStartRewardAd();
     if(changed){
       r.selectedTool=null;
@@ -470,9 +472,11 @@ function liteContinueAfterReward(origin=liteRewardPanel,event){
 }
 function liteUpdateReward(){
   const roll=L.lite.roll;if(!roll||!liteRewardPanel)return;
+  const shopUnlocked=L.endless||L.stage>=2;
+  if(!shopUnlocked)roll.shopOpen=false;
   const shop=!!roll.shopOpen;I('overlay').dataset.litePage=shop?'shop':'supply';liteRewardPanel.dataset.page=shop?'shop':'supply';
   I('lite-shop-hero').hidden=!shop;I('lite-shop').hidden=!shop;I('lite-next').hidden=!shop;
-  I('v3-reward-choices').hidden=shop;I('lite-choice-refresh').hidden=shop;I('v3-shop-open').hidden=shop;I('lite-reward-summary').hidden=shop;
+  I('v3-reward-choices').hidden=shop;I('lite-choice-refresh').hidden=shop;I('v3-shop-open').hidden=shop||!shopUnlocked;I('lite-reward-summary').hidden=shop;
   if(roll.selectedTool&&!roll.toolOptions.includes(roll.selectedTool))roll.selectedTool=null;
   I('lite-reward-summary').textContent=roll.chosenTool?'已领取 '+liteTool(roll.chosenTool).name+' ×1':(roll.selectedTool?'已选中 '+liteTool(roll.selectedTool).name+' · 点击下方确认领取':'免费补给 · 选择一件');
   I('lite-reward-title').textContent=shop?'道具商店':'补给站';I('dialog-tag').textContent=shop?'ROTATION V3 · 商店':'ROTATION V3 · 三选一';
@@ -481,7 +485,7 @@ function liteUpdateReward(){
   if(shopBtn){
     const adWaiting=!!roll.adReadyAt;
     shopBtn.disabled=adWaiting;
-    shopBtn.dataset.available='true';
+    shopBtn.dataset.available=String(shopUnlocked);
     const subLabel=shopBtn.querySelector('.v3-shop-btn-sub');
     if(subLabel){
       subLabel.textContent=adWaiting?'播放中…':'进店';
@@ -492,7 +496,7 @@ function liteUpdateReward(){
     const unseen=L.liteUnseenShopTools?L.liteUnseenShopTools():[];
     const badge=I('v3-shop-badge');
     if(badge){
-      badge.hidden=shop||unseen.length===0;
+      badge.hidden=shop||!shopUnlocked||unseen.length===0;
     }
   }
   const choices=I('v3-reward-choices');choices.replaceChildren();
@@ -549,7 +553,8 @@ function liteUpdateReward(){
     const sellOffers=I('lite-shop-sell-offers');
     if(sellOffers){
       sellOffers.replaceChildren();
-      const ownedTools=RULES.tools.filter(t=>(L.lite.tools[t.id]||0)>0);
+      const inv=L.liteInventory();
+      const ownedTools=(inv?.order?.length?inv.order.map(id=>liteTool(id)).filter(Boolean):liteConfig.tools.filter(t=>(L.lite.tools[t.id]||0)>0));
       const emptyTip=I('lite-shop-sell-empty');
       if(emptyTip)emptyTip.hidden=ownedTools.length>0;
       for(const tool of ownedTools){
@@ -572,6 +577,7 @@ function liteUpdateRefresh(){
   const r=L.lite.roll;if(!r||!I('lite-refresh-reward'))return;
   const confirmBtn=I('lite-confirm-reward'),refreshBtn=I('lite-refresh-reward'),statusSpan=I('lite-refresh-status');
   const free=r.freeRefreshes,ads=r.adRefreshes,waiting=!!r.adReadyAt;
+  const shopUnlocked=L.endless||L.stage>=2;
 
   if(r.settled){
     if(confirmBtn)confirmBtn.hidden=true;
@@ -591,6 +597,11 @@ function liteUpdateRefresh(){
     }else{
       if(confirmBtn)confirmBtn.hidden=true;
     }
+    if(!shopUnlocked){
+      refreshBtn.hidden=true;
+      if(statusSpan)statusSpan.hidden=true;
+      return;
+    }
     refreshBtn.hidden=false;
     refreshBtn.dataset.action='refresh';
     refreshBtn.disabled=waiting||(!free&&!ads);
@@ -607,12 +618,35 @@ function liteResetCompletion(){
   toolFx?.resetScoreBar?.();
   liteCompletionState?.walletAnimation?.cancel();liteCompletionState?.node.remove();liteCompletionState=null;liteCompletionStage=-1;delete I('stage').dataset.liteClear;
 }
+function liteAdvanceWithoutReward(origin=I('stage'),event){
+  v3RegisterRankClear();
+  const next=L.liteNextStageInfo();
+  se.unlock();
+  const applyAdvance=()=>{
+    if(!L.liteSkipReward())return;
+    liteCloseReward();G0=false;y5();I('overlay').hidden=true;I('game-ui').inert=false;I('game-ui').removeAttribute('aria-hidden');Gt.reset();Ie.reset();pe.reset();G3();yt=0;k0=null;H3=-1;be.round=-1;v5(0,true);d3();Qt();liteSync();liteSaveSafe();
+    S1(next.won?'本局完成':`第 ${L.stage+1} 关 · 目标 ${L.goal} 分`);
+  };
+  if(me.active){
+    applyAdvance();
+    return;
+  }
+  z6({element:origin,event,palette:l5[next.stage%l5.length],kicker:next.won?'本局完成':`目标 ${next.goal} 分`,title:next.won?'挑战完成':`第 ${next.stage+1} 关`,swap:applyAdvance});
+}
+function liteFinishStageClear(origin=I('stage'),event){
+  if(!L.endless&&L.stage===0){
+    liteAdvanceWithoutReward(origin,event);
+    return;
+  }
+  liteShowReward();
+}
 function liteFastForwardCompletion(event){
   if(event){event.preventDefault();event.stopPropagation();}
   const state=liteCompletionState;if(!state)return;
   state.coinArrived=state.coinTotal;
-  liteShowReward();
-  state.walletAnimation?.cancel();state.node.remove();liteCompletionState=null;delete I('stage').dataset.liteClear;liteSync();
+  state.walletAnimation?.cancel();state.node.remove();liteCompletionState=null;delete I('stage').dataset.liteClear;
+  liteFinishStageClear(I('stage'),event);
+  liteSync();
 }
 function liteShowCompletion(){
   if(liteCompletionState)return;
@@ -693,9 +727,9 @@ function liteUpdateCompletion(now){
   const settled=state.elapsed-state.coinsSettledAt;
   if(settled>=520)state.node.classList.add('is-leaving');
   if(settled>=720){
-    // Open the destination before releasing the clear overlay and its visible HUD.
-    liteShowReward();
-    state.walletAnimation?.cancel();state.node.remove();liteCompletionState=null;delete I('stage').dataset.liteClear;liteSync();
+    state.walletAnimation?.cancel();state.node.remove();liteCompletionState=null;delete I('stage').dataset.liteClear;
+    liteFinishStageClear(I('stage'));
+    liteSync();
   }
 }
 function liteShowReward(){
@@ -708,7 +742,7 @@ function liteShowReward(){
 Qt=function(){
   if(G0||me.active||Ie.busy||Vt||pe.particles.length||k0)return;
   if(['checkpoint-complete','level-complete'].includes(L.phase)){
-    if(L.lite.roll||liteCompletionStage===L.stage){if(!liteCompletionState)liteShowReward();}
+    if(L.lite.roll||liteCompletionStage===L.stage){if(!liteCompletionState)liteFinishStageClear();}
     else{
       if(toolFx?.shouldHoldCompletion?.(L))return;
       liteShowCompletion();
@@ -799,6 +833,8 @@ I('exit-dialog').addEventListener('close',()=>{if(rotationCodex.dialog.open)I('v
 const rotationBackpack=createRotationBackpack({rail:toolRail,config:liteConfig,game:()=>L,canOpen:liteCanAct,pause:()=>{const previous=G0;G0=true;_t();se.pause();return previous;},resume:previous=>{G0=previous;u3=performance.now();_t();if(!previous)se.unlock();liteSync();liteSaveSafe();},changed:()=>{liteSync();liteSaveSafe();}});
 function liteSyncInventory(){
   const inv=L.liteInventory(),key=inv.active.join('|');
+  const hideRail=!L.endless&&L.stage<2&&inv.order.length===0&&!(L.lite.acquiredTools?.length>0);
+  toolRail.hidden=hideRail;
   if(toolRail.dataset.order!==key){for(const id of inv.active)toolRail.append(I('lite-'+id));toolRail.append(rotationBackpack.entry);toolRail.dataset.order=key;}
   const button=rotationBackpack.entry;button.disabled=!liteCanAct();liteText(button.querySelector('b'),inv.reserve.length);button.querySelector('b').hidden=!inv.reserve.length;button.setAttribute('aria-label','背包，暂存'+inv.reserve.length+'种道具');
 }
