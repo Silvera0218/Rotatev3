@@ -1412,5 +1412,141 @@ test('exhausted drops special elimination awards points that can reach goal and 
   assert.ok(g.lite.coins > 0); // Coins awarded
 });
 
+test('WebGL score bar overcharge chugging activates on goal reach, scales color tiers by overflow, and holds completion for 0.55s', () => {
+  const toolFxSource = fs.readFileSync(new URL('../lite-tool-fx.js', import.meta.url), 'utf8');
+  let nowValue = 1000;
+  const goalTrack = {
+    dataset: {},
+    getBoundingClientRect: () => ({ left: 40, top: 20, width: 160, height: 12 })
+  };
+  const scoreEl = {
+    dataset: {},
+    style: {},
+    get transform() { return this.style.transform || ''; }
+  };
+  const stageEl = {
+    clientWidth: 360,
+    clientHeight: 640,
+    children: [],
+    querySelector: (sel) => sel === '#goal-track' ? goalTrack : sel === '#level-score' ? scoreEl : null,
+    append(child) { this.children.push(child); },
+    getBoundingClientRect: () => ({ left: 0, top: 0, width: 360, height: 640 })
+  };
+  const railEl = {
+    querySelectorAll: () => [],
+    addEventListener: () => {}
+  };
+  const mockWindow = {
+    devicePixelRatio: 1,
+    matchMedia: () => ({ matches: false }),
+    requestAnimationFrame: () => 1,
+    addEventListener: () => {},
+    performance: { now: () => nowValue }
+  };
+  const mockDocument = {
+    hidden: false,
+    addEventListener: () => {},
+    createElement: () => ({ style: {}, setAttribute: () => {} }),
+    getElementById: (id) => id === 'goal-track' ? goalTrack : id === 'level-score' ? scoreEl : null
+  };
+  class MockVector3 {
+    constructor(x = 0, y = 0, z = 0) { this.x = x; this.y = y; this.z = z; }
+    set(x, y, z) { this.x = x; this.y = y; this.z = z; return this; }
+  }
+  class MockMatrix4 {
+    makeTranslation() { return this; }
+    makeRotationZ() { return this; }
+    makeScale() { return this; }
+    multiply() { return this; }
+  }
+  class MockBufferAttribute {
+    constructor(arr, size) { this.array = arr; this.itemSize = size; this.needsUpdate = false; }
+  }
+  class MockPlaneGeometry {
+    constructor() { this.attributes = {}; }
+    setAttribute(name, attr) { this.attributes[name] = attr; }
+  }
+  class MockShaderMaterial {
+    constructor(cfg) { this.uniforms = cfg.uniforms; this.vertexShader = cfg.vertexShader; this.fragmentShader = cfg.fragmentShader; }
+  }
+  class MockInstancedMesh {
+    constructor(geo, mat, count) {
+      this.geometry = geo;
+      this.material = mat;
+      this.count = count;
+      this.visible = true;
+      this.frustumCulled = true;
+      this.position = new MockVector3();
+      this.scale = new MockVector3(1, 1, 1);
+      this.instanceMatrix = { needsUpdate: false };
+    }
+    setMatrixAt() {}
+  }
+  const fxCtx = vm.createContext({
+    window: mockWindow,
+    document: mockDocument,
+    performance: mockWindow.performance,
+    requestAnimationFrame: mockWindow.requestAnimationFrame,
+    matchMedia: mockWindow.matchMedia,
+    Float32Array,
+    Math
+  });
+  vm.runInContext(toolFxSource, fxCtx);
+  const toolFx = fxCtx.createRotationToolFx({
+    stage: stageEl,
+    rail: railEl,
+    THREE: {
+      WebGLRenderer: class { setPixelRatio() {} setSize() {} setClearColor() {} render() {} },
+      Scene: class { add() {} },
+      OrthographicCamera: class { constructor() { this.position = new MockVector3(); } updateProjectionMatrix() {} },
+      ShaderMaterial: MockShaderMaterial,
+      PlaneGeometry: MockPlaneGeometry,
+      BufferAttribute: MockBufferAttribute,
+      InstancedBufferAttribute: MockBufferAttribute,
+      InstancedMesh: MockInstancedMesh,
+      Matrix4: MockMatrix4,
+      Vector3: MockVector3,
+      Color: class { constructor(r = 1, g = 1, b = 1) { this.r = r; this.g = g; this.b = b; } }
+    }
+  });
+
+  // Below goal: overcharge inactive
+  toolFx.syncScoreBar({ stageKey: '0:0', displayScore: 90, goalScore: 100, visible: true });
+  assert.equal(mockWindow.__toolFxDiag.overcharge.active, false);
+  assert.equal(goalTrack.dataset.overcharge, undefined);
+
+  // Reach goal (5% overflow -> tier 0 lime): overcharge activates!
+  toolFx.syncScoreBar({ stageKey: '0:0', displayScore: 105, goalScore: 100, visible: true });
+  assert.equal(mockWindow.__toolFxDiag.overcharge.active, true);
+  assert.equal(goalTrack.dataset.overcharge, 'true');
+  assert.equal(goalTrack.dataset.overchargeTier, '0');
+  assert.ok(scoreEl.style.transform.includes('scale('));
+
+  // Medium overflow (25% -> tier 1 gold)
+  nowValue += 120;
+  toolFx.syncScoreBar({ stageKey: '0:0', displayScore: 125, goalScore: 100, visible: true });
+  assert.equal(goalTrack.dataset.overchargeTier, '1');
+
+  // High overflow (55% -> tier 2 incandescent white + prismatic neon)
+  nowValue += 120;
+  toolFx.syncScoreBar({ stageKey: '0:0', displayScore: 155, goalScore: 100, visible: true });
+  assert.equal(goalTrack.dataset.overchargeTier, '2');
+
+  // Completion hold: holds for 550ms (0.55s) then releases
+  const dummyGame = { phase: 'checkpoint-complete', stage: 0, checkpoint: 0, checkpointScore: 155, goal: 100 };
+  assert.equal(toolFx.shouldHoldCompletion(dummyGame, nowValue), true);
+  nowValue += 300;
+  assert.equal(toolFx.shouldHoldCompletion(dummyGame, nowValue), true);
+  nowValue += 260; // total 560ms >= 550ms
+  assert.equal(toolFx.shouldHoldCompletion(dummyGame, nowValue), false);
+
+  // Reset cleans up attributes and mesh count
+  toolFx.resetScoreBar();
+  assert.equal(mockWindow.__toolFxDiag.overcharge.active, false);
+  assert.equal(goalTrack.dataset.overcharge, undefined);
+  assert.equal(goalTrack.dataset.overchargeTier, undefined);
+  assert.equal(mockWindow.__toolFxDiag.scoreBarMesh.count, 0);
+});
+
 
 

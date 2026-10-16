@@ -70,7 +70,19 @@ const liteOriginalStart=ka;
 ka=function(...args){liteResetCompletion();liteRewardStage=-1;liteAcquisitionQueue.length=0;I('stage').querySelectorAll('.lite-clear-burst').forEach(n=>n.remove());liteCloseReward();const result=liteOriginalStart(...args);L.beginStage();S1(`填满轮廓得分 · 本关目标 ${L.goal} 分`);liteSync();return result;};
 Ca=function(){L.beginStage();G0=false;I('overlay').hidden=true;};
 const liteOriginalWa=wa;
-wa=function(){liteOriginalWa();if(L.lite){I('phase-label').textContent='本关得分';I('goal-track').setAttribute('aria-label','本关分数进度');}};
+function liteSyncOverchargeBar(){
+  if(!L.lite||!toolFx?.syncScoreBar)return;
+  const authoredGoal=L.endless?L.goal:(liteConfig.scoreGoals?.[L.stage]??L.goal);
+  const displayScore=Math.max(0,L.checkpointScore-(L.score-V9));
+  const visible=he&&I('overlay').hidden&&!liteCompletionState&&['play','clearing','settling','rotating','checkpoint-complete','level-complete'].includes(L.phase);
+  toolFx.syncScoreBar({
+    stageKey:`${L.stage}:${L.checkpoint}`,
+    displayScore,
+    goalScore:authoredGoal,
+    visible
+  });
+}
+wa=function(){liteOriginalWa();if(L.lite){I('phase-label').textContent='本关得分';I('goal-track').setAttribute('aria-label','本关分数进度');liteSyncOverchargeBar();}};
 const liteOriginalV3=V3;
 V3=function(){liteOriginalV3();liteSync();};
 function liteSync(){
@@ -93,6 +105,7 @@ function liteSync(){
   liteText(I('goal-score'),`/ ${Ne(authoredGoal)}`);
   I('goal-track').setAttribute('aria-valuemax',String(authoredGoal));
   I('goal-track').setAttribute('aria-valuenow',String(Math.min(authoredGoal,Math.max(0,L.score))));
+  liteSyncOverchargeBar();
   liteText(I('drops-remaining'),`${Math.max(0,L.dropsRemaining)} / ${authoredDrops}`);
   if(authoredTarget){
     const targetName=I('target-name'),targetCount=I('count');
@@ -591,15 +604,27 @@ function liteUpdateRefresh(){
 
 // Keep the clear acknowledgement on the board, before opening the dice destination.
 function liteResetCompletion(){
+  toolFx?.resetScoreBar?.();
   liteCompletionState?.walletAnimation?.cancel();liteCompletionState?.node.remove();liteCompletionState=null;liteCompletionStage=-1;delete I('stage').dataset.liteClear;
+}
+function liteFastForwardCompletion(event){
+  if(event){event.preventDefault();event.stopPropagation();}
+  const state=liteCompletionState;if(!state)return;
+  state.coinArrived=state.coinTotal;
+  liteShowReward();
+  state.walletAnimation?.cancel();state.node.remove();liteCompletionState=null;delete I('stage').dataset.liteClear;liteSync();
 }
 function liteShowCompletion(){
   if(liteCompletionState)return;
+  toolFx?.resetScoreBar?.();
   // Resumed clears from older rule files may not have credited the award yet.
   L.liteAwardClearCoins();
   liteCompletionStage=L.stage;
   const node=document.createElement('div');node.id='lite-stage-clear';node.setAttribute('role','status');node.setAttribute('aria-live','polite');node.setAttribute('aria-atomic','true');node.tabIndex=-1;
   node.innerHTML='<div class="lite-clear-emblem"><img class="lite-clear-lettering" src="./assets/ui/stage-clear-c-v1.png" width="2017" height="780" alt="通关成功" draggable="false"><div class="lite-clear-coins"><svg viewBox="0 0 20 20" aria-hidden="true" shape-rendering="crispEdges"><path fill="#143b83" d="M5 1h10v2h3v3h1v9h-2v3h-3v1H6v-1H3v-3H1V6h2V3h2z"/><path fill="#ffcc32" d="M6 3h8v2h3v10h-3v2H6v-2H3V6h3z"/><path fill="#fff1a0" d="M6 4h8v2H6zM4 6h2v8H4z"/><path fill="#cb791b" d="M9 7h3v7H9z"/><path fill="#fff1a0" d="M8 6h3v7H8z"/></svg><span>金币</span><strong>+'+liteConfig.clearCoins+'</strong></div><span class="lite-clear-pixels" aria-hidden="true"></span></div>';
+  node.addEventListener('pointerdown',event=>event.stopPropagation());
+  node.addEventListener('click',liteFastForwardCompletion);
+  node.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' ')liteFastForwardCompletion(event);});
 
   const particles=node.querySelector('.lite-clear-pixels');
   for(let i=0;i<28;i++){
@@ -684,7 +709,10 @@ Qt=function(){
   if(G0||me.active||Ie.busy||Vt||pe.particles.length||k0)return;
   if(['checkpoint-complete','level-complete'].includes(L.phase)){
     if(L.lite.roll||liteCompletionStage===L.stage){if(!liteCompletionState)liteShowReward();}
-    else liteShowCompletion();
+    else{
+      if(toolFx?.shouldHoldCompletion?.(L))return;
+      liteShowCompletion();
+    }
     return;
   }
   if(L.phase==='lost'||L.phase==='won'){
@@ -886,7 +914,7 @@ let liteFrameErrorLogged=false;
 function liteFrameSafe(){try{liteFrame();}catch(error){if(!liteFrameErrorLogged){liteFrameErrorLogged=true;console.error('[ROTATION V3] optional HUD frame failed',error);}}}
 // Deterministic fixture access is only present with the explicit QA query flag.
 if(new URLSearchParams(location.search).has('qa')){
-  window.__liteQA={game:L,action:H6,specialVisuals:()=>liteBlockFx.snapshot(),refresh:()=>{H3=-1;V3();d3();Qt();},showReward(){liteShowReward();d3();liteUpdateReward();},get paused(){return G0;},set paused(value){G0=value;},set naturalFall(value){liteNaturalFall=value;},get busy(){return !!k0||Ie.busy||!!pe.particles.length||me.active;},screenCell(x,y){const rect=I('stage').getBoundingClientRect(),p=new U(x,y,0).project(Bt);return{x:rect.left+I('stage').clientLeft+(p.x+1)*Ge.w/2,y:rect.top+I('stage').clientTop+Ge.top+(1-p.y)*Ge.playHeight/2};},start(){ka(true);},settle(){for(let i=0;i<100;i++){if(L.phase==='rotating')L.finishRotation();else if(L.phase==='clearing')L.finishClear();else if(L.phase==='settling')L.finishSettlement();else break;}L.events=[];k0=null;Ie.reset();pe.reset();V3();Qt();},renderer:de};
+  window.__liteQA={game:L,action:H6,specialVisuals:()=>liteBlockFx.snapshot(),refresh:()=>{H3=-1;V3();d3();Qt();},showReward(){liteShowReward();d3();liteUpdateReward();},skipCompletion(){liteFastForwardCompletion();},get paused(){return G0;},set paused(value){G0=value;},set naturalFall(value){liteNaturalFall=value;},get busy(){return !!k0||Ie.busy||!!pe.particles.length||me.active;},screenCell(x,y){const rect=I('stage').getBoundingClientRect(),p=new U(x,y,0).project(Bt);return{x:rect.left+I('stage').clientLeft+(p.x+1)*Ge.w/2,y:rect.top+I('stage').clientTop+Ge.top+(1-p.y)*Ge.playHeight/2};},start(){ka(true);},settle(){for(let i=0;i<100;i++){if(L.phase==='rotating')L.finishRotation();else if(L.phase==='clearing')L.finishClear();else if(L.phase==='settling')L.finishSettlement();else break;}L.events=[];k0=null;Ie.reset();pe.reset();V3();toolFx?.skipOverchargeHold?.(L);Qt();},renderer:de};
   window.__THREE_GAME_TEST_HOOKS__={
     async setState(name){
       if(!['active-play','reward','failure'].includes(name))throw Error('Unknown state '+name);

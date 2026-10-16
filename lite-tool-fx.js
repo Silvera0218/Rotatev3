@@ -312,6 +312,149 @@ globalThis.createRotationToolFx = function({ stage, rail, THREE }) {
   particleMesh.frustumCulled = false;
   scene.add(particleMesh);
 
+  // ==========================================
+  // SHADER 4: Score Bar Overcharge Chugging ("突突"爆分充能传导条)
+  // Left-to-right energy wave slamming into a pulsing right-end bulge,
+  // with temperature progression: Lime (#c4ff17) -> Gold (#ffe24f) -> White + Prismatic
+  // ==========================================
+  const scoreBarGeo = new THREE.PlaneGeometry(1, 1);
+  const scoreBarMaterial = new THREE.ShaderMaterial({
+    transparent: true,
+    depthTest: false,
+    depthWrite: false,
+    side: 2,
+    uniforms: {
+      uTime: { value: 0 },
+      uBarSize: { value: new THREE.Vector3(260, 6, 0) },
+      uQuadSize: { value: new THREE.Vector3(320, 56, 0) },
+      uPad: { value: new THREE.Vector3(18, 25, 0) },
+      uState: { value: new THREE.Vector3(0, 0, 0) } // x: overflowRatio, y: chugPulse, z: breachFlash
+    },
+    vertexShader: `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      precision highp float;
+      uniform float uTime;
+      uniform vec3 uBarSize;
+      uniform vec3 uQuadSize;
+      uniform vec3 uPad;
+      uniform vec3 uState;
+      varying vec2 vUv;
+
+      float smin(float a, float b, float k) {
+        float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
+        return mix(b, a, h) - k * h * (1.0 - h);
+      }
+
+      void main() {
+        float overflowRatio = max(0.0, uState.x);
+        float chugPulse = clamp(uState.y, 0.0, 1.35);
+        float breachFlash = clamp(uState.z, 0.0, 1.0);
+
+        // Normalized heat tiers:
+        // goldMix: 0 -> 1 across overflowRatio [0.08 .. 0.35]
+        // prismMix: 0 -> 1 across overflowRatio [0.35 .. 0.70]
+        float goldMix = smoothstep(0.06, 0.32, overflowRatio);
+        float prismMix = smoothstep(0.32, 0.68, overflowRatio);
+        float heat = clamp(overflowRatio / 0.55, 0.0, 1.0);
+
+        // Pixel coordinates relative to #goal-track:
+        // px in [0, uBarSize.x], py = 0 at vertical center of #goal-track
+        float px = vUv.x * uQuadSize.x - uPad.x;
+        float py = (vUv.y - 0.5) * uQuadSize.y;
+
+        float barW = max(10.0, uBarSize.x);
+        float barH = max(5.0, uBarSize.y);
+        float xNorm = clamp(px / barW, 0.0, 1.0);
+
+        // High-speed charge packets racing from left (0.0) to right (1.0)
+        float waveSpeed = 3.6 + 1.8 * heat;
+        float packetPhase = fract(xNorm * 1.65 - uTime * waveSpeed);
+        float packetCrest = pow(1.0 - packetPhase, 2.8) * smoothstep(0.0, 0.12, packetPhase);
+        float fastWave = 0.5 + 0.5 * sin(xNorm * 16.0 - uTime * 34.0);
+
+        // Right-end impact zone (where waves slam into the 100% cap and bulge out)
+        float headZone = smoothstep(0.68, 1.0, xNorm);
+
+        // Elastic vertical jitter ("突突" vibration, stronger toward right tip)
+        float jitterAmp = (0.55 + 1.15 * headZone) * chugPulse * (0.65 + 0.55 * heat);
+        float yJitter = sin(uTime * 82.0 + xNorm * 10.0) * jitterAmp;
+
+        // Right tip punches/juts outward on every chug beat
+        float rightTipX = barW + (3.2 + 5.2 * heat) * chugPulse + 1.4 * fastWave * chugPulse;
+
+        // Bar half-thickness with traveling wave swell + right-end bulge
+        float baseHalfH = barH * 0.56;
+        float barPump = 1.0 + (0.26 + 0.20 * heat) * chugPulse;
+        float waveSwell = 1.0 + 0.28 * packetCrest * smoothstep(0.08, 0.92, xNorm);
+        float tipSwell = 1.0 + (0.85 + 0.55 * heat) * (0.30 + 0.70 * chugPulse) * pow(headZone, 1.6);
+        float localRadius = baseHalfH * barPump * waveSwell * tipSwell;
+
+        // Distance to deformed bar spine
+        float clampedX = clamp(px, 0.0, rightTipX);
+        float dBar = length(vec2(px - clampedX, py - yJitter)) - localRadius;
+
+        // Dedicated pulsing energy bulb at the right tip ("突突"鼓包头)
+        float knotCenterX = rightTipX - 2.5;
+        float knotRadius = baseHalfH * (1.35 + (1.15 + 0.65 * heat) * chugPulse + 0.35 * breachFlash);
+        float dKnot = length(vec2((px - knotCenterX) * 0.78, py - yJitter)) - knotRadius;
+
+        float d = smin(dBar, dKnot, 3.2);
+
+        // Crisp core mask and multi-layered outer plasma glow
+        float coreMask = 1.0 - smoothstep(-0.8, 0.9, d);
+        float innerHighlight = 1.0 - smoothstep(-localRadius * 0.85, -localRadius * 0.15, d);
+        float rimGlow = exp(-max(0.0, d) / (3.2 + 2.8 * chugPulse + 2.2 * heat)) * (0.65 + 0.45 * chugPulse);
+        float headFlare = exp(-length(vec2((px - knotCenterX) * 0.55, py - yJitter)) / (9.5 + 8.5 * chugPulse + 6.0 * breachFlash))
+                          * (0.55 + 0.65 * chugPulse + 0.85 * breachFlash);
+
+        float alpha = clamp(coreMask + rimGlow * 0.78 + headFlare * 0.85, 0.0, 1.0);
+        if (alpha <= 0.004) discard;
+
+        // Diagonal >>> energy chevrons racing rightward inside the bar
+        float chevronCoord = (px * 0.26 - abs(py - yJitter) * 0.75 - uTime * (26.0 + 10.0 * heat));
+        float chevron = smoothstep(-0.2, 0.35, sin(chevronCoord));
+
+        // Color Palette Progression:
+        // 1. Lime (#c4ff17)
+        vec3 limeBase = vec3(0.769, 1.000, 0.090);
+        vec3 limeBright = vec3(0.945, 1.000, 0.580);
+        // 2. Radiant Gold (#ffcc24 -> #ffe875)
+        vec3 goldBase = vec3(1.000, 0.760, 0.120);
+        vec3 goldBright = vec3(1.000, 0.940, 0.520);
+        // 3. Prismatic Neon + Incandescent White
+        vec3 prismWave = 0.55 + 0.45 * cos(6.28318 * (xNorm * 1.35 - uTime * 3.2 + vec3(0.0, 0.33, 0.67)));
+        vec3 prismBase = mix(prismWave, vec3(1.0, 0.92, 0.35), 0.25);
+
+        vec3 bodyCol = mix(limeBase, goldBase, goldMix);
+        bodyCol = mix(bodyCol, prismBase, prismMix);
+
+        vec3 brightCol = mix(limeBright, goldBright, goldMix);
+        brightCol = mix(brightCol, vec3(1.0, 1.0, 1.0), prismMix * 0.85);
+
+        // Combine chevron stripes, traveling charge packet, and right-tip white-hot compression
+        float energyBand = clamp(0.35 * chevron + 0.55 * packetCrest + 0.45 * innerHighlight, 0.0, 1.0);
+        vec3 col = mix(bodyCol, brightCol, energyBand);
+
+        // White-hot flash at the right bulge during each chug pulse & initial breach
+        float whiteHot = clamp(headZone * (0.45 * chugPulse + 0.35 * packetCrest) + headFlare * 0.65 + breachFlash * 0.75, 0.0, 1.0);
+        col = mix(col, vec3(1.0, 1.0, 0.96), whiteHot);
+
+        gl_FragColor = vec4(col, alpha);
+      }
+    `
+  });
+
+  const scoreBarMesh = new THREE.InstancedMesh(scoreBarGeo, scoreBarMaterial, 1);
+  scoreBarMesh.count = 0;
+  scoreBarMesh.frustumCulled = false;
+  scene.add(scoreBarMesh);
+
   // Game Authentic Color Palette:
   // Lime, Sky Blue, Cyan, White, and Orange (matching the game's tetrominoes)
   const PALETTE = [
@@ -323,12 +466,229 @@ globalThis.createRotationToolFx = function({ stage, rail, THREE }) {
     [1.000, 0.650, 0.250], // #ffa640  warm orange (tetromino accent)
   ];
 
+  const GOLD_PALETTE = [
+    [1.000, 0.890, 0.310], // #ffe24f radiant gold
+    [1.000, 0.740, 0.120], // #ffbd1f deep gold
+    [1.000, 0.965, 0.720], // #fff6b8 white-gold
+    [0.769, 1.000, 0.090], // #c4ff17 lime accent
+  ];
+
+  const PRISM_PALETTE = [
+    [1.000, 1.000, 1.000], // pure white
+    [1.000, 0.890, 0.310], // #ffe24f solar gold
+    [0.224, 0.950, 1.000], // #39f2ff electric cyan
+    [1.000, 0.380, 0.760], // #ff61c2 neon magenta
+    [0.769, 1.000, 0.090], // #c4ff17 lime
+  ];
+
   // Active effect state
   const ripples = [];
   const particles = [];
   let lastBurstTime = 0;
   let animId = 0;
   let lastTime = performance.now();
+
+  // Score Bar Overcharge ("突突"爆分) state
+  const overcharge = {
+    active: false,
+    stageKey: '',
+    displayScore: 0,
+    goalScore: 100,
+    overflowRatio: 0,
+    chugPulse: 0,
+    breachFlash: 0,
+    lastChugAt: 0,
+    holdStartedAt: null,
+    holdCompletedStageKey: '',
+    HOLD_DURATION_MS: 550
+  };
+
+  function pickOverchargeColor(ratio) {
+    if (ratio >= 0.38) return PRISM_PALETTE[Math.floor(Math.random() * PRISM_PALETTE.length)];
+    if (ratio >= 0.12) return GOLD_PALETTE[Math.floor(Math.random() * GOLD_PALETTE.length)];
+    return PALETTE[Math.floor(Math.random() * 2)]; // Lime / Bright Lime
+  }
+
+  function spawnScoreBarSparks(tx, ty, barW, barH, ratio, isBreach = false) {
+    const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduced && !isBreach) return;
+
+    const heat = Math.min(1.0, Math.max(0.0, ratio / 0.5));
+    const count = isBreach
+      ? (reduced ? 6 : 16)
+      : (2 + Math.floor(Math.random() * 3) + (heat > 0.35 ? 2 : 0));
+
+    for (let i = 0; i < count; i++) {
+      if (particles.length >= maxParticles) particles.shift();
+
+      const r = Math.random();
+      const pType = r < 0.52 ? 0 : (r < 0.84 ? 1 : 2);
+
+      // Eject primarily from the right tip (85%..100% of bar width), fan outward to the right/up/down
+      const alongRight = isBreach ? (0.75 + Math.random() * 0.25) : (0.86 + Math.random() * 0.16);
+      const px = tx + barW * alongRight;
+      const py = ty + (Math.random() - 0.5) * (barH + 6);
+
+      // Fan angle centered slightly rightward (-75deg .. +75deg), with occasional upward/leftward sparks
+      const spreadAngle = (Math.random() - 0.5) * Math.PI * (isBreach ? 1.65 : 1.15);
+      const speedBase = isBreach ? 115 : (68 + 65 * heat);
+      const speed = speedBase + Math.random() * (isBreach ? 120 : 85);
+
+      const vx = Math.cos(spreadAngle) * speed + (isBreach ? 15 : 28);
+      const vy = Math.sin(spreadAngle) * speed - 18;
+
+      const baseSize = pType === 0
+        ? (5.5 + Math.random() * 4.5 + heat * 1.5)
+        : (pType === 1 ? (3.5 + Math.random() * 2.5) : (8.0 + Math.random() * 4.0));
+      const life = isBreach ? (0.45 + Math.random() * 0.28) : (0.28 + Math.random() * 0.22);
+
+      particles.push({
+        x: px,
+        y: py,
+        vx,
+        vy,
+        rotZ: Math.random() * Math.PI * 2,
+        vRotZ: (Math.random() - 0.5) * 9.0,
+        baseSize,
+        type: pType,
+        seed: Math.random(),
+        color: pickOverchargeColor(ratio),
+        age: 0,
+        maxLife: life
+      });
+    }
+
+    if (isBreach) {
+      ripples.push({
+        x: tx + barW,
+        y: ty,
+        age: 0,
+        maxLife: reduced ? 0.35 : 0.55,
+        maxRadius: reduced ? 52 : 88
+      });
+      if (ripples.length > maxRipples) ripples.shift();
+    }
+  }
+
+  function pulseScoreDigits(ratio, isBreach = false) {
+    const scoreNode = stage.querySelector('#level-score');
+    if (!scoreNode || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const heat = Math.min(1.0, Math.max(0.0, ratio / 0.5));
+    const scalePeak = isBreach ? 1.34 : (1.14 + 0.14 * heat);
+    const jitterX = (Math.random() - 0.5) * (2.5 + 2.5 * heat);
+    const jitterY = -(1.5 + 2.0 * heat);
+    scoreNode.style.transform = `translate(${jitterX.toFixed(1)}px, ${jitterY.toFixed(1)}px) scale(${scalePeak.toFixed(2)})`;
+  }
+
+  function triggerChugBeat(isBreach = false) {
+    const trackEl = stage.querySelector('#goal-track');
+    if (!trackEl) return;
+    const sRect = stage.getBoundingClientRect();
+    const tRect = trackEl.getBoundingClientRect();
+    if (tRect.width <= 0) return;
+
+    const tx = tRect.left - sRect.left;
+    const ty = tRect.top + tRect.height / 2 - sRect.top;
+
+    overcharge.chugPulse = isBreach ? 1.30 : Math.max(overcharge.chugPulse, 1.0);
+    if (isBreach) overcharge.breachFlash = 1.0;
+    overcharge.lastChugAt = performance.now();
+
+    spawnScoreBarSparks(tx, ty, tRect.width, tRect.height, overcharge.overflowRatio, isBreach);
+    pulseScoreDigits(overcharge.overflowRatio, isBreach);
+  }
+
+  function syncScoreBar({ stageKey, displayScore, goalScore, visible = true } = {}) {
+    const trackEl = stage.querySelector('#goal-track');
+    if (!visible || !trackEl || goalScore <= 0 || displayScore < goalScore) {
+      if (overcharge.active) {
+        overcharge.active = false;
+        overcharge.chugPulse = 0;
+        overcharge.breachFlash = 0;
+        scoreBarMesh.count = 0;
+        if (trackEl) {
+          delete trackEl.dataset.overcharge;
+          delete trackEl.dataset.overchargeTier;
+        }
+        const scoreNode = stage.querySelector('#level-score');
+        if (scoreNode?.style) scoreNode.style.transform = '';
+      }
+      if (stageKey && stageKey !== overcharge.stageKey) {
+        overcharge.stageKey = stageKey;
+        overcharge.holdStartedAt = null;
+      }
+      return;
+    }
+
+    const nextRatio = Math.max(0, displayScore - goalScore) / Math.max(1, goalScore);
+    const wasActive = overcharge.active && overcharge.stageKey === stageKey;
+    const scoreIncreased = wasActive && displayScore > overcharge.displayScore;
+
+    overcharge.stageKey = stageKey;
+    overcharge.displayScore = displayScore;
+    overcharge.goalScore = goalScore;
+    overcharge.overflowRatio = nextRatio;
+    overcharge.active = true;
+    trackEl.dataset.overcharge = 'true';
+    trackEl.dataset.overchargeTier = nextRatio > 0.40 ? '2' : nextRatio >= 0.15 ? '1' : '0';
+
+    if (!wasActive) {
+      triggerChugBeat(true);
+    } else if (scoreIncreased && performance.now() - overcharge.lastChugAt >= 42) {
+      triggerChugBeat(false);
+    }
+  }
+
+  function resetScoreBar() {
+    const trackEl = stage.querySelector('#goal-track');
+    overcharge.active = false;
+    overcharge.chugPulse = 0;
+    overcharge.breachFlash = 0;
+    overcharge.holdStartedAt = null;
+    scoreBarMesh.count = 0;
+    if (trackEl) {
+      delete trackEl.dataset.overcharge;
+      delete trackEl.dataset.overchargeTier;
+    }
+    const scoreNode = stage.querySelector('#level-score');
+    if (scoreNode?.style) scoreNode.style.transform = '';
+  }
+
+  function shouldHoldCompletion(game, now = performance.now()) {
+    if (!game || !['checkpoint-complete', 'level-complete'].includes(game.phase)) return false;
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return false;
+    const key = `${game.stage}:${game.checkpoint}`;
+    if (overcharge.holdCompletedStageKey === key) return false;
+    if ((game.checkpointScore || 0) < (game.goal || 0)) return false;
+
+    if (overcharge.holdStartedAt === null || overcharge.stageKey !== key) {
+      overcharge.stageKey = key;
+      overcharge.holdStartedAt = now;
+      // Ensure overcharge bar is visibly active during the 0.55s climax hold
+      syncScoreBar({
+        stageKey: key,
+        displayScore: Math.max(game.goal || 1, game.checkpointScore || 0),
+        goalScore: Math.max(1, game.goal || 1),
+        visible: true
+      });
+    }
+
+    if (now - overcharge.holdStartedAt < overcharge.HOLD_DURATION_MS) {
+      return true;
+    }
+
+    overcharge.holdCompletedStageKey = key;
+    overcharge.holdStartedAt = null;
+    return false;
+  }
+
+  function skipOverchargeHold(game) {
+    if (game) {
+      overcharge.holdCompletedStageKey = `${game.stage}:${game.checkpoint}`;
+    }
+    overcharge.holdStartedAt = null;
+    resetScoreBar();
+  }
 
   // Resize canvas to match #stage dimensions & DPR
   function resize() {
@@ -468,6 +828,7 @@ globalThis.createRotationToolFx = function({ stage, rail, THREE }) {
     const timeSec = now / 1000;
     haloMaterial.uniforms.uTime.value = timeSec;
     particleMaterial.uniforms.uTime.value = timeSec;
+    scoreBarMaterial.uniforms.uTime.value = timeSec;
 
     // Decay button click punches
     for (const [btn, punch] of buttonPunches.entries()) {
@@ -478,6 +839,59 @@ globalThis.createRotationToolFx = function({ stage, rail, THREE }) {
     }
 
     const sRect = stage.getBoundingClientRect();
+
+    // 0. Update Score Bar Overcharge ("突突"爆分)
+    if (overcharge.active) {
+      const trackEl = stage.querySelector('#goal-track');
+      const overlayEl = stage.querySelector('#overlay');
+      const clearEl = stage.querySelector('#lite-stage-clear');
+      const hiddenByModal = (overlayEl && !overlayEl.hidden) || !!clearEl;
+      if (!trackEl || hiddenByModal) {
+        scoreBarMesh.count = 0;
+      } else {
+        // Automatic high-frequency chug beat (~13.5Hz -> every ~74ms) while overcharging
+        const chugIntervalMs = Math.max(52, 76 - Math.min(20, overcharge.overflowRatio * 36));
+        if (now - overcharge.lastChugAt >= chugIntervalMs) {
+          triggerChugBeat(false);
+        }
+
+        overcharge.chugPulse = Math.max(0, overcharge.chugPulse - dt * 9.5);
+        overcharge.breachFlash = Math.max(0, overcharge.breachFlash - dt * 3.8);
+
+        const tRect = trackEl.getBoundingClientRect();
+        const barX = tRect.left - sRect.left;
+        const barY = tRect.top - sRect.top;
+        const barW = Math.max(10, tRect.width);
+        const barH = Math.max(5, tRect.height);
+
+        const padLeft = 18;
+        const padRight = 38;
+        const padY = 26;
+        const quadW = barW + padLeft + padRight;
+        const quadH = barH + padY * 2;
+        const cx = barX - padLeft + quadW * 0.5;
+        const cy = barY - padY + quadH * 0.5;
+
+        scoreBarMaterial.uniforms.uBarSize.value.set(barW, barH, 0);
+        scoreBarMaterial.uniforms.uQuadSize.value.set(quadW, quadH, 0);
+        scoreBarMaterial.uniforms.uPad.value.set(padLeft, padY, 0);
+        scoreBarMaterial.uniforms.uState.value.set(
+          overcharge.overflowRatio,
+          overcharge.chugPulse,
+          overcharge.breachFlash
+        );
+
+        matrixHelper.identity();
+        matrixHelper.makeRotationZ(0);
+        matrixHelper.scale(scaleHelper.set(quadW, quadH, 1));
+        matrixHelper.setPosition(cx, cy, 1);
+        scoreBarMesh.setMatrixAt(0, matrixHelper);
+        scoreBarMesh.count = 1;
+        scoreBarMesh.instanceMatrix.needsUpdate = true;
+      }
+    } else {
+      scoreBarMesh.count = 0;
+    }
 
     // 1. Update Breathing Halos hugging active tool buttons
     const buttons = [...rail.querySelectorAll('.insertion-button')].filter(btn => {
@@ -616,11 +1030,20 @@ globalThis.createRotationToolFx = function({ stage, rail, THREE }) {
 
     window.__toolFxDiag = {
       renderer, scene, camera,
-      haloMesh, rippleMesh, particleMesh,
+      haloMesh, rippleMesh, particleMesh, scoreBarMesh,
+      overcharge,
       lastButtonsCount: buttons.length,
       activeParticles: pCount
     };
   }
+
+  window.__toolFxDiag = {
+    renderer, scene, camera,
+    haloMesh, rippleMesh, particleMesh, scoreBarMesh,
+    overcharge,
+    lastButtonsCount: 0,
+    activeParticles: 0
+  };
 
   // Start continuous RAF loop
   animId = requestAnimationFrame(renderFrame);
@@ -628,6 +1051,10 @@ globalThis.createRotationToolFx = function({ stage, rail, THREE }) {
   return {
     triggerBurst,
     triggerButtonBurst,
+    syncScoreBar,
+    resetScoreBar,
+    shouldHoldCompletion,
+    skipOverchargeHold,
     destroy() {
       if (animId) cancelAnimationFrame(animId);
       canvas?.remove();
@@ -637,6 +1064,8 @@ globalThis.createRotationToolFx = function({ stage, rail, THREE }) {
       rippleMaterial.dispose();
       particleGeo.dispose();
       particleMaterial.dispose();
+      scoreBarGeo.dispose();
+      scoreBarMaterial.dispose();
       renderer.dispose();
     }
   };
