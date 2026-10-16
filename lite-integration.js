@@ -927,6 +927,111 @@ const settingsStatus=I('motion-tuner').querySelector('[role=status]');
 const trimSettingsStatus=()=>{if(/设置自动保存|已保存到本机|并保存到本机/.test(settingsStatus.textContent))settingsStatus.textContent='';};
 new MutationObserver(trimSettingsStatus).observe(settingsStatus,{childList:true,characterData:true,subtree:true});trimSettingsStatus();
 
+// Independent closed dashed outlines for each 4-connected target region.
+Nf=function(){
+  vt&&(lt.remove(vt),vt.geometry.dispose(),vt.material.dispose());
+  const rawSet=new Set(),cellMap=new Map();
+  for(const cell of L.target.cells||[]){
+    const x=Number(cell.x),y=Number(cell.y);
+    if(!Number.isInteger(x)||!Number.isInteger(y)||(x===0&&y===0))continue;
+    const k=le(x,y);rawSet.add(k);cellMap.set(k,{x,y});
+  }
+  const visited=new Set(),components=[];
+  const rotorNeighbors8=['1,0','-1,0','0,1','0,-1','1,1','1,-1','-1,1','-1,-1'];
+  for(const [k,start] of cellMap.entries()){
+    if(visited.has(k))continue;
+    const comp=new Set([k]);visited.add(k);
+    const queue=[start];
+    for(let i=0;i<queue.length;i++){
+      const cur=queue[i];
+      for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+        const nk=le(cur.x+dx,cur.y+dy);
+        if(rawSet.has(nk)&&!visited.has(nk)){
+          visited.add(nk);comp.add(nk);queue.push(cellMap.get(nk));
+        }
+      }
+    }
+    if(rotorNeighbors8.every(rk=>comp.has(rk)))comp.add('0,0');
+    components.push(comp);
+  }
+  const inset=.085,e=[],lineDistances=[];
+  for(const comp of components){
+    const edges=[],outByStart=new Map();
+    const addEdge=(x0,y0,x1,y1,dx,dy,nx,ny)=>{
+      const edge={x0,y0,x1,y1,dx,dy,nx,ny,used:false};
+      edges.push(edge);
+      const sk=`${x0},${y0}`;
+      let list=outByStart.get(sk);
+      if(!list){list=[];outByStart.set(sk,list);}
+      list.push(edge);
+    };
+    for(const k of comp){
+      const [x,y]=k.split(',').map(Number);
+      if(!comp.has(le(x,y-1)))addEdge(x-.5,y-.5,x+.5,y-.5,1,0,0,1);
+      if(!comp.has(le(x+1,y)))addEdge(x+.5,y-.5,x+.5,y+.5,0,1,-1,0);
+      if(!comp.has(le(x,y+1)))addEdge(x+.5,y+.5,x-.5,y+.5,-1,0,0,-1);
+      if(!comp.has(le(x-1,y)))addEdge(x-.5,y+.5,x-.5,y-.5,0,-1,1,0);
+    }
+    for(const startEdge of edges){
+      if(startEdge.used)continue;
+      const chain=[];let cur=startEdge;
+      while(cur&&!cur.used){
+        cur.used=true;chain.push(cur);
+        const candidates=(outByStart.get(`${cur.x1},${cur.y1}`)||[]).filter(cand=>!cand.used);
+        if(!candidates.length)break;
+        if(candidates.length===1)cur=candidates[0];
+        else{
+          const rank=cand=>{
+            const cross=cur.dx*cand.dy-cur.dy*cand.dx;
+            const dot=cur.dx*cand.dx+cur.dy*cand.dy;
+            return cross>0?0:dot>0?1:2;
+          };
+          candidates.sort((a,b)=>rank(a)-rank(b));
+          cur=candidates[0];
+        }
+      }
+      if(chain.length<4)continue;
+      const sides=[];
+      for(const seg of chain){
+        const prev=sides[sides.length-1];
+        if(prev&&prev.dx===seg.dx&&prev.dy===seg.dy){prev.x1=seg.x1;prev.y1=seg.y1;}
+        else sides.push({...seg});
+      }
+      if(sides.length>1&&sides[0].dx===sides[sides.length-1].dx&&sides[0].dy===sides[sides.length-1].dy){
+        const last=sides.pop();sides[0].x0=last.x0;sides[0].y0=last.y0;
+      }
+      const corners=[];
+      for(let i=0;i<sides.length;i++){
+        const prev=sides[(i+sides.length-1)%sides.length],curr=sides[i];
+        corners.push({x:curr.x0+inset*(prev.nx+curr.nx),y:curr.y0+inset*(prev.ny+curr.ny)});
+      }
+      let dist=0;
+      for(let i=0;i<corners.length;i++){
+        const a=corners[i],b=corners[(i+1)%corners.length];
+        const segLen=Math.hypot(b.x-a.x,b.y-a.y);
+        e.push(a.x,a.y,.6,b.x,b.y,.6);
+        lineDistances.push(dist,dist+segLen);
+        dist+=segLen;
+      }
+    }
+  }
+  const t=new O2({color:16771251,dashSize:.16,gapSize:.10,transparent:true,opacity:.95,depthTest:false});
+  t.onBeforeCompile=i=>{
+    i.uniforms.uDashOffset={value:G9};
+    i.fragmentShader=i.fragmentShader.replace("uniform float totalSize;","uniform float totalSize;\nuniform float uDashOffset;").replace("mod( vLineDistance, totalSize )","mod( vLineDistance - uDashOffset, totalSize )");
+    t.userData.flowUniform=i.uniforms.uDashOffset;
+  };
+  t.customProgramCacheKey=()=>"outline-flow-v1";
+  const geom=new He();
+  geom.setAttribute("position",new ve(e,3));
+  geom.setAttribute("lineDistance",new ve(lineDistances,1));
+  vt=new b9(geom,t);
+  vt.userData.flowOffset=G9;
+  lt.add(vt);
+  H3=L.stage+":"+L.target.cells.map(i=>le(i.x,i.y)).sort().join(";");
+};
+H3=-1;
+
 // Cell-owned multipliers stay attached to the rendered cell through every move.
 const heavyMarkers=document.createElement('div');heavyMarkers.id='lite-heavy-markers';heavyMarkers.setAttribute('aria-hidden','true');I('game-ui').append(heavyMarkers);
 function liteSyncHeavyMarkers(){
@@ -950,7 +1055,7 @@ let liteFrameErrorLogged=false;
 function liteFrameSafe(){try{liteFrame();}catch(error){if(!liteFrameErrorLogged){liteFrameErrorLogged=true;console.error('[ROTATION V3] optional HUD frame failed',error);}}}
 // Deterministic fixture access is only present with the explicit QA query flag.
 if(new URLSearchParams(location.search).has('qa')){
-  window.__liteQA={game:L,action:H6,specialVisuals:()=>liteBlockFx.snapshot(),refresh:()=>{H3=-1;V3();d3();Qt();},showReward(){liteShowReward();d3();liteUpdateReward();},skipCompletion(){liteFastForwardCompletion();},get paused(){return G0;},set paused(value){G0=value;},set naturalFall(value){liteNaturalFall=value;},get busy(){return !!k0||Ie.busy||!!pe.particles.length||me.active;},screenCell(x,y){const rect=I('stage').getBoundingClientRect(),p=new U(x,y,0).project(Bt);return{x:rect.left+I('stage').clientLeft+(p.x+1)*Ge.w/2,y:rect.top+I('stage').clientTop+Ge.top+(1-p.y)*Ge.playHeight/2};},start(){ka(true);},settle(){for(let i=0;i<100;i++){if(L.phase==='rotating')L.finishRotation();else if(L.phase==='clearing')L.finishClear();else if(L.phase==='settling')L.finishSettlement();else break;}L.events=[];k0=null;Ie.reset();pe.reset();V3();toolFx?.skipOverchargeHold?.(L);Qt();},renderer:de};
+  window.__liteQA={game:L,action:H6,specialVisuals:()=>liteBlockFx.snapshot(),refresh:()=>{H3=-1;V3();d3();Qt();},showReward(){liteShowReward();d3();liteUpdateReward();},skipCompletion(){liteFastForwardCompletion();},get paused(){return G0;},set paused(value){G0=value;},set naturalFall(value){liteNaturalFall=value;},get busy(){return !!k0||Ie.busy||!!pe.particles.length||me.active;},screenCell(x,y){const rect=I('stage').getBoundingClientRect(),p=new U(x,y,0).project(Bt);return{x:rect.left+I('stage').clientLeft+(p.x+1)*Ge.w/2,y:rect.top+I('stage').clientTop+Ge.top+(1-p.y)*Ge.playHeight/2};},start(){g5=false;ka(true);},settle(){for(let i=0;i<100;i++){if(L.phase==='rotating')L.finishRotation();else if(L.phase==='clearing')L.finishClear();else if(L.phase==='settling')L.finishSettlement();else break;}L.events=[];k0=null;Ie.reset();pe.reset();V3();toolFx?.skipOverchargeHold?.(L);Qt();},renderer:de};
   window.__THREE_GAME_TEST_HOOKS__={
     async setState(name){
       if(!['active-play','reward','failure'].includes(name))throw Error('Unknown state '+name);

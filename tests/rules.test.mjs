@@ -1549,6 +1549,63 @@ test('shop sell view in lite-integration.js uses liteConfig/liteInventory withou
   assert.equal(integrationSource.includes('lite-shop-sell-offers'), true);
 });
 
+test('Nf() builds independent closed dashed outline loops for disconnected target regions with per-loop lineDistance', () => {
+  const integrationSource = fs.readFileSync(new URL('../lite-integration.js', import.meta.url), 'utf8');
+  const match = integrationSource.match(/Nf=function\(\)\{[\s\S]*?\n\};\nH3=-1;/);
+  assert.ok(match, 'lite-integration.js must override Nf()');
 
+  let vt = null, H3 = -1;
+  const lt = { add(obj) { vt = obj; }, remove() {} };
+  const L = { stage: 0, target: { cells: [] } };
+  const fn = new Function(
+    'L', 'lt', 'le', 'O2', 'He', 've', 'b9', 'G9',
+    `let vt=null,H3=-1;\n${match[0]}\nreturn { run: () => { Nf(); return { vt, H3 }; } };`
+  );
+  const harness = fn(
+    L,
+    lt,
+    (x, y) => `${x},${y}`,
+    class MockLineDashedMaterial { constructor(opts) { Object.assign(this, opts); this.userData = {}; } dispose() {} },
+    class MockBufferGeometry {
+      constructor() { this.attributes = {}; }
+      setAttribute(name, attr) { this.attributes[name] = attr; return this; }
+      dispose() {}
+    },
+    class MockBufferAttribute { constructor(array, itemSize) { this.array = array; this.itemSize = itemSize; } },
+    class MockLineSegments { constructor(geometry, material) { this.geometry = geometry; this.material = material; this.userData = {}; } },
+    0
+  );
 
+  // 1. Classic 3x3 ring around (0,0) -> 1 closed outer loop of 4 sides (8 vertices = 24 coords)
+  L.stage = 0;
+  L.target.cells = [
+    { x: -1, y: 1 }, { x: 0, y: 1 }, { x: 1, y: 1 },
+    { x: -1, y: 0 },                 { x: 1, y: 0 },
+    { x: -1, y: -1 }, { x: 0, y: -1 }, { x: 1, y: -1 }
+  ];
+  const res1 = harness.run();
+  const pos1 = res1.vt.geometry.attributes.position.array;
+  const dist1 = res1.vt.geometry.attributes.lineDistance.array;
+  assert.equal(pos1.length, 24, 'solid 3x3 ring around rotor should produce 1 closed 4-sided rectangle (8 vertices)');
+  assert.equal(dist1[0], 0);
+  assert.ok(dist1[dist1.length - 1] > 10);
 
+  // 2. Disconnected Level 15 Phase 1 shape -> 7 independent closed loops (7 zero-starts in lineDistance)
+  L.stage = 14;
+  L.target.cells = [
+    { x: -1, y: 3 }, { x: 0, y: 3 }, { x: 1, y: 3 },
+    { x: -3, y: 2 }, { x: -2, y: 2 }, { x: 2, y: 2 }, { x: 3, y: 2 },
+    { x: -3, y: 1 }, { x: 0, y: 1 }, { x: 1, y: 1 }, { x: 3, y: 1 },
+    { x: -3, y: 0 }, { x: -1, y: 0 }, { x: 1, y: 0 }, { x: 3, y: 0 },
+    { x: -3, y: -1 }, { x: 0, y: -1 }, { x: 3, y: -1 },
+    { x: -3, y: -2 }, { x: -2, y: -2 }, { x: 2, y: -2 }, { x: 3, y: -2 },
+    { x: -1, y: -3 }, { x: 0, y: -3 }, { x: 1, y: -3 }
+  ];
+  const res15 = harness.run();
+  const dist15 = res15.vt.geometry.attributes.lineDistance.array;
+  let zeroStarts = 0;
+  for (let i = 0; i < dist15.length; i += 2) {
+    if (dist15[i] === 0) zeroStarts++;
+  }
+  assert.equal(zeroStarts, 7, 'Level 15 Phase 1 should produce 7 independent closed loops each starting at lineDistance 0');
+});
