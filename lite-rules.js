@@ -872,6 +872,9 @@
       if (pending !== undefined) {
         delete this.lite.pendingPhase;
         this.liteAdvancePhase(pending);
+        if (this.phase === 'play' && !this.checkClear() && !this.completeCheckpoint()) {
+          this.checkDeadlock();
+        }
       }
       const torque = this.lite?.heavyRotationTorque;
       if (torque && this.phase === 'play' && torque.dir) {
@@ -906,7 +909,8 @@
         const finalPoints=Math.round(originalPoints*comboMultiplier);
         const bonus=finalPoints-originalPoints;
         this.score+=bonus;this.levelScore+=bonus;this.checkpointScore+=bonus;this.chainPoints+=bonus;
-        result.points=finalPoints;result.chainPoints=this.chainPoints;
+        result.points=finalPoints;this.lastScore&&(this.lastScore.points=finalPoints);
+        result.chainPoints=this.chainPoints;
         result.combo=combo;result.comboN=n;result.comboMultiplier=comboMultiplier;result.comboBonus=bonus;
         if(this.lastScore){
           this.lastScore.points=finalPoints;this.lastScore.chainPoints=this.chainPoints;
@@ -965,13 +969,70 @@
       const base=this.liteStageClearCoins(this.stage);
       return this.lite.clearCoinReward?.stage===this.stage?this.lite.clearCoinReward:{stage:this.stage,base,excess:0,overflow:0,total:base};
     };
+    const RESCUE_EFFECTS = new Set(['pack', 'heavy', 'blast', 'glass']);
+    p.liteHasRescueTool = function () {
+      if (!this.lite) return false;
+      if (RESCUE_EFFECTS.has(this.active?.liteEffect)) return true;
+      const tools = this.lite.tools || {};
+      const hasUnfilledTarget = this.target.cells.some(cell => !this.board.some(other => colorKey(other) === colorKey(cell)));
+      if (tools.shovel > 0 && hasUnfilledTarget) return true;
+      for (const effect of RESCUE_EFFECTS) {
+        if (tools['block-' + effect] > 0) return true;
+      }
+      if (tools.swap > 0 && this.liteUnlockedTools().some(tool => RESCUE_EFFECTS.has(tool.blockEffect))) {
+        return true;
+      }
+      return false;
+    };
+    p.liteEnclosedTargetCells = function () {
+      const board = this.board || [];
+      const targetCells = this.target?.cells || [];
+      if (!board.length || !targetCells.length) return [];
+      const blocked = new Set(['0,0', ...board.map(colorKey)]);
+      const unfilled = targetCells.filter(c => !blocked.has(colorKey(c)));
+      if (!unfilled.length) return [];
+      let minX = 0, maxX = 0, minY = 0, maxY = 0;
+      for (const c of board) {
+        if (c.x < minX) minX = c.x;
+        if (c.x > maxX) maxX = c.x;
+        if (c.y < minY) minY = c.y;
+        if (c.y > maxY) maxY = c.y;
+      }
+      for (const c of unfilled) {
+        if (c.x < minX) minX = c.x;
+        if (c.x > maxX) maxX = c.x;
+        if (c.y < minY) minY = c.y;
+        if (c.y > maxY) maxY = c.y;
+      }
+      minX -= 1; maxX += 1; minY -= 1; maxY += 1;
+      const visited = new Set([`${minX},${minY}`]);
+      const queue = [{ x: minX, y: minY }];
+      for (let i = 0; i < queue.length; i++) {
+        const cur = queue[i];
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = cur.x + dx, ny = cur.y + dy;
+          if (nx < minX || nx > maxX || ny < minY || ny > maxY) continue;
+          const key = `${nx},${ny}`;
+          if (!blocked.has(key) && !visited.has(key)) {
+            visited.add(key);
+            queue.push({ x: nx, y: ny });
+          }
+        }
+      }
+      return unfilled.filter(c => !visited.has(colorKey(c))).map(c => ({ x: c.x, y: c.y }));
+    };
     p.checkDeadlock = function (...args) {
-      // The original rescue search knows neither lite tool. Let the player use
-      // an available shovel or swap before declaring the position unrecoverable.
-      if (this.lite?.tools.shovel > 0 && this.target.cells.some(cell=>!this.board.some(other=>colorKey(other)===colorKey(cell))) || this.lite?.tools.swap > 0) {
+      if (this.phase !== 'play' || this.filled === this.target.cells.length) return false;
+      if (this.liteHasRescueTool()) {
         this.deadlockCells = [];
         this.deadlockWarning = null;
         return false;
+      }
+      const enclosed = this.liteEnclosedTargetCells();
+      if (enclosed.length) {
+        this.deadlockCells = enclosed;
+        this.fail('内部空缺被堵住，当前可用操作无法解围或达标。');
+        return true;
       }
       return original.checkDeadlock.apply(this, args);
     };
@@ -1092,6 +1153,7 @@
       this.lite.tools[type]--;
       this.liteInventory();
       this.build.revision++;
+      if (type === 'swap') this.checkDeadlock();
       return true;
     };
     p.liteRewardOptions = function (_route='tool', previous=[]) {

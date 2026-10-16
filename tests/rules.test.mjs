@@ -330,18 +330,36 @@ test('rotation miss and invalid overflow never award a tool', () => {
 });
 
 
-test('deadlock waits for a usable swap even with no shovel, then resumes original check', () => {
+test('deadlock triggers immediately when no rescue tool is available, and waits only for actual rescue tools', () => {
+  // In early stages (0..4), swap can only roll column/patch (non-rescue), so sealed holes trigger death immediately even with swap/supply/column/patch/dye/repair.
+  const early = make();
+  early.stage = 4;
+  early.lite.phaseIndex = 1;
+  early.outline = null;
+  early.board = early.target.cells.filter(c => !(c.x === 1 && c.y === 2)).map((c, idx) => ({ x: c.x, y: c.y, id: early.id++, type: idx % 2 ? 'L' : 'J' }));
+  early.lite.tools.shovel = 0;
+  early.lite.tools.swap = 1;
+  early.lite.tools.supply = 2;
+  early.lite.tools['block-patch'] = 2;
+  early.lite.tools['block-column'] = 1;
+  assert.equal(early.checkDeadlock(), true);
+  assert.equal(early.phase, 'lost');
+
+  // In stage 5+, rescue blocks (pack/heavy) are unlocked so swap or rescue blocks delay deadlock,
+  // but if swap rolls a non-rescue block (e.g. column) and no rescue tool remains, death triggers immediately.
   const g = make();
-  g.board = [];
-  for (let x = -2; x <= 2; x++) for (let y = -2; y <= 2; y++) {
-    if ((x !== 0 || y !== 0) && (x !== 1 || y !== 1)) g.board.push({ x, y, id: g.id++, type: 'L' });
-  }
+  g.stage = 5;
+  g.outline = null;
+  g.board = g.target.cells.filter(c => !(c.x === 1 && c.y === 1)).map((c, idx) => ({ x: c.x, y: c.y, id: g.id++, type: 'L' }));
   g.lite.tools.shovel = 0;
   g.lite.tools.swap = 1;
   assert.equal(g.checkDeadlock(), false);
   assert.equal(g.phase, 'play');
-  g.lite.tools.swap = 0;
-  assert.equal(g.checkDeadlock(), true);
+
+  // Script swap to pick index 0 ('block-column', non-rescue)
+  scripted(g, [0]);
+  assert.equal(g.liteUseTool('swap'), true);
+  assert.equal(g.lite.tools['block-column'], 1);
   assert.equal(g.phase, 'lost');
 });
 
