@@ -935,76 +935,80 @@ test('a resumed run comes back to the outline it was left on',()=>{
 });
 
 test('tools and special blocks unlock progressively across stages in shop, drops, swap and rewards',()=>{
- // Stage 0 (第1关): 6 items (block-column, block-heavy, block-patch, repair, supply, swap)
- const g0=make();assert.equal(g0.stage,0);
- const unlocked0=g0.liteUnlockedTools();
- assert.deepEqual(Array.from(unlocked0.map(t=>t.id)).sort(),['block-column','block-heavy','block-patch','dye','repair','supply','swap'].sort());
- const r0=complete(g0);
- assert.equal(r0.shopOffers.length,7);
- assert.equal(r0.shopOffers.filter(o=>o.kind==='tool').length,4);
- assert.equal(r0.shopOffers.filter(o=>o.kind==='special').length,3);
- assert.equal(r0.toolOptions.length,3);
- assert(r0.toolOptions.every(id=>unlocked0.some(t=>t.id===id)));
+ // Stages 0~4 (前5关): 6 items (block-column, block-patch, dye, repair, supply, swap)
+ for(let stage=0;stage<=4;stage++){
+  const g=make();g.stage=stage;
+  const unlocked=g.liteUnlockedTools();
+  assert.equal(unlocked.length,6);
+  assert.deepEqual(Array.from(unlocked.map(t=>t.id)).sort(),['block-column','block-patch','dye','repair','supply','swap'].sort());
+  const r=complete(g);
+  assert.equal(r.shopOffers.length,6);
+  assert.equal(r.shopOffers.filter(o=>o.kind==='tool').length,4);
+  assert.equal(r.shopOffers.filter(o=>o.kind==='special').length,2);
+  assert.equal(r.toolOptions.length,3);
+  assert(r.toolOptions.every(id=>unlocked.some(t=>t.id===id)));
+ }
 
- // Stage 2 (第3关): +shovel, block-pack -> 8 items
- const g2=make();g2.stage=2;
- const unlocked2=g2.liteUnlockedTools();
- assert.equal(unlocked2.length,9);
- const r2=complete(g2);
- assert.equal(r2.shopOffers.length,8);
- assert.equal(r2.shopOffers.filter(o=>o.kind==='tool').length,4);
- assert.equal(r2.shopOffers.filter(o=>o.kind==='special').length,4);
- assert.equal(r2.toolOptions.length,3);
- assert(r2.toolOptions.every(id=>unlocked2.some(t=>t.id===id)));
-
- // Stage 3 (第4关): +block-glass -> 9 items
- const g3=make();g3.stage=3;
- const unlocked3=g3.liteUnlockedTools();
- assert.equal(unlocked3.length,10);
- const r3=complete(g3);
- assert.equal(r3.shopOffers.length,8);
-
- // Stage 4 (第5关): +block-diamond -> 10 items
- const g4=make();g4.stage=4;
- assert.equal(g4.liteUnlockedTools().length,11);
-
- // Stage 5 (第6关): +dye -> 11 items
+ // Stage 5 (第6关): +shovel, block-pack, block-heavy -> 9 items
  const g5=make();g5.stage=5;
  const unlocked5=g5.liteUnlockedTools();
- assert.equal(unlocked5.length,11);
+ assert.equal(unlocked5.length,9);
+ const r5=complete(g5);
+ assert.equal(r5.shopOffers.length,8);
+ assert.equal(r5.shopOffers.filter(o=>o.kind==='tool').length,4);
+ assert.equal(r5.shopOffers.filter(o=>o.kind==='special').length,4);
+ assert.equal(r5.toolOptions.length,3);
+ assert(r5.toolOptions.every(id=>unlocked5.some(t=>t.id===id)));
  for(let i=0;i<10;i++){
   g5.lite.tools.swap=1;g5.phase='play';g5.active={type:'T',color:'T'};
   g5.liteUseTool('swap');
   assert.equal(g5.lite.tools['block-blast']||0,0);
  }
 
- // Stage 6+ (第7关及以后): all 12 items
+ // Stage 6 (第7关): +block-glass, block-diamond -> 11 items
  const g6=make();g6.stage=6;
- assert.equal(g6.liteUnlockedTools().length,12);
+ const unlocked6=g6.liteUnlockedTools();
+ assert.equal(unlocked6.length,11);
  const r6=complete(g6);
  assert.equal(r6.shopOffers.length,8);
+
+ // Stage 7+ (第8关及以后): +block-blast -> all 12 items
+ const g7=make();g7.stage=7;
+ assert.equal(g7.liteUnlockedTools().length,12);
+ const r7=complete(g7);
+ assert.equal(r7.shopOffers.length,8);
+});
+
+test('all tool and special block effect descriptions are concise (at most 12 characters)',()=>{
+ for(const tool of ctx.ROTATION_LITE.tools){
+  assert.ok(tool.description.length>0&&tool.description.length<=12,`${tool.id} description "${tool.description}" exceeds 12 chars`);
+  if(tool.detail)assert.ok(tool.detail.length<=12,`${tool.id} detail "${tool.detail}" exceeds 12 chars`);
+ }
+ for(const special of ctx.ROTATION_LITE.specials){
+  assert.ok(special.description.length>0&&special.description.length<=12,`${special.id} description "${special.description}" exceeds 12 chars`);
+  if(special.detail)assert.ok(special.detail.length<=12,`${special.id} detail "${special.detail}" exceeds 12 chars`);
+ }
 });
 
 test('unseen shop tools track unlocks, trigger badge, and persist once seen',()=>{
- // Stage 0: default 6 items are already seen, no unseen tools
+ // Stages 0~4 (前5关): default 6 items are already seen, no unseen tools
  const g=make();
  assert.equal(g.stage,0);
- assert.deepEqual(Array.from(g.lite.seenShopTools).sort(),['block-column','block-heavy','block-patch','dye','repair','supply','swap'].sort());
- assert.equal(g.liteUnseenShopTools().length,0);
+ assert.deepEqual(Array.from(g.lite.seenShopTools).sort(),['block-column','block-patch','dye','repair','supply','swap'].sort());
+ for(let stage=0;stage<=4;stage++){
+  g.stage=stage;
+  assert.equal(g.liteUnseenShopTools().length,0);
+ }
 
- // Advance to Stage 1: still the same 6 items
- g.stage=1;
- assert.equal(g.liteUnseenShopTools().length,0);
-
- // Advance to Stage 2: shovel, block-pack are unlocked and unseen
- g.stage=2;
- const unseen2=g.liteUnseenShopTools();
- assert.equal(unseen2.length,2);
- assert.deepEqual(Array.from(unseen2.map(t=>t.id)).sort(),['block-pack','shovel'].sort());
+ // Advance to Stage 5 (第6关): shovel, block-pack, block-heavy are unlocked and unseen
+ g.stage=5;
+ const unseen5=g.liteUnseenShopTools();
+ assert.equal(unseen5.length,3);
+ assert.deepEqual(Array.from(unseen5.map(t=>t.id)).sort(),['block-heavy','block-pack','shovel'].sort());
 
  // Mark unseen as seen
- const marked2=g.liteMarkShopToolsSeen(unseen2.map(t=>t.id));
- assert.equal(marked2.length,2);
+ const marked5=g.liteMarkShopToolsSeen(unseen5.map(t=>t.id));
+ assert.equal(marked5.length,3);
  assert.equal(g.liteUnseenShopTools().length,0);
 
  // Save and restore preserves seenShopTools
@@ -1014,36 +1018,24 @@ test('unseen shop tools track unlocks, trigger badge, and persist once seen',()=
  restored.liteEnsureExpansion();
  assert.equal(restored.liteUnseenShopTools().length,0);
 
- // Advance to Stage 3: block-glass unlocked and unseen
- restored.stage=3;
- const unseen3=restored.liteUnseenShopTools();
- assert.equal(unseen3.length,1);
- assert.deepEqual(Array.from(unseen3.map(t=>t.id)).sort(),['block-glass'].sort());
- restored.liteMarkShopToolsSeen();
- assert.equal(restored.liteUnseenShopTools().length,0);
-
- // Advance to Stage 4: block-diamond unlocked and unseen
- restored.stage=4;
- const unseen4=restored.liteUnseenShopTools();
- assert.equal(unseen4.length,1);
- assert.deepEqual(Array.from(unseen4.map(t=>t.id)).sort(),['block-diamond'].sort());
- restored.liteMarkShopToolsSeen();
- assert.equal(restored.liteUnseenShopTools().length,0);
-
- // Advance to Stage 5: no new tools at stage 5 now that dye is stage 0
-  restored.stage=5;
-  assert.equal(restored.liteUnseenShopTools().length,0);
-
-  // Advance to Stage 6: block-blast unlocked and unseen
+ // Advance to Stage 6 (第7关): block-glass, block-diamond unlocked and unseen
  restored.stage=6;
  const unseen6=restored.liteUnseenShopTools();
- assert.equal(unseen6.length,1);
- assert.deepEqual(Array.from(unseen6.map(t=>t.id)).sort(),['block-blast'].sort());
+ assert.equal(unseen6.length,2);
+ assert.deepEqual(Array.from(unseen6.map(t=>t.id)).sort(),['block-diamond','block-glass'].sort());
  restored.liteMarkShopToolsSeen();
  assert.equal(restored.liteUnseenShopTools().length,0);
 
- // Advance to Stage 7+: no more tools to unlock
+ // Advance to Stage 7 (第8关): block-blast unlocked and unseen
  restored.stage=7;
+ const unseen7=restored.liteUnseenShopTools();
+ assert.equal(unseen7.length,1);
+ assert.deepEqual(Array.from(unseen7.map(t=>t.id)).sort(),['block-blast'].sort());
+ restored.liteMarkShopToolsSeen();
+ assert.equal(restored.liteUnseenShopTools().length,0);
+
+ // Advance to Stage 8+: no more tools to unlock
+ restored.stage=8;
  assert.equal(restored.liteUnseenShopTools().length,0);
 });
 

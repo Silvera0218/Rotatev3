@@ -42,13 +42,13 @@ globalThis.createRotationCodex=function({config,makeGame,game,entry,onResume,onH
       if(item.blockEffect==='heavy')for(const cell of g.board)delete cell.liteHeavyBonus;
       if(result.compact)g.settleRemaining(result.repack===true);
       if(item.blockEffect==='heavy')mode='heavy';
-      if(item.blockEffect==='patch'){mode='coin';const score=g.awardCells(g.board,'outline');note='消除 '+g.board.length+' 格 · 金币 +'+score.coinReward;g.board=[];}
+      if(item.blockEffect==='patch'){mode='coin';const score=g.awardCells(g.board,'outline');note='消除获得 +'+score.coinReward+' 金币';g.board=[];}
       after=clone(g.board);to=after.filter(c=>cells.some(a=>a.id===c.id));removed=before.filter(c=>!after.some(a=>a.id===c.id));
-      const notes={column:'整列染成同色',blast:'本关 100 分 → 爆炸得分 +'+(result.scoring?.points||0),glass:'左侧所有方块镜像至右侧 · 生成方块变为玻璃方块',trim:'左侧所有方块镜像至右侧 · 生成方块变为玻璃方块',patch:note,pack:'向转轴中心重排',heavy:'每格分别下落到底 · 下方方块向底部-中心压紧',diamond:'标记同色格 · 消除时分数×3'};note=notes[item.blockEffect];
+      const notes={column:'整列染成同色',blast:'清除同色并额外加分',glass:'一侧方块镜像至另一侧',trim:'一侧方块镜像至另一侧',patch:note,pack:'向转轴中心重排',heavy:'消除下方整列并向内聚拢',diamond:'标记同色，消除分×3'};note=notes[item.blockEffect];
     }else if(item.id==='shovel'){
-      g.lite.tools.shovel=1;g.liteUseTool('shovel');after=clone(g.board);from=clone(before);to=clone(after);note='沿当前已摆好的样式向外扩圈';
+      g.lite.tools.shovel=1;g.liteUseTool('shovel');after=clone(g.board);from=clone(before);to=clone(after);note='沿已有方块外围扩充一圈';
     }else if(item.id==='dye'||item.id==='swap'){
-      g.active={type:'T',color:'T',shape:[[0,0],[1,0],[0,1]],x:0,y:3};g.next='L';g.nextColor='L';g.nextShape=[[0,0],[0,1],[0,2],[1,0]];from=clone(g.cells());g.lite.tools[item.id]=1;g.liteUseTool(item.id);g.active.x=0;g.active.y=3;to=clone(g.cells());after=before;mode='piece';note=item.id==='dye'?'落块染成棋盘主色':'当前落块换成下一块';
+      g.active={type:'T',color:'T',shape:[[0,0],[1,0],[0,1]],x:0,y:3};g.next='L';g.nextColor='L';g.nextShape=[[0,0],[0,1],[0,2],[1,0]];from=clone(g.cells());g.lite.tools[item.id]=1;g.liteUseTool(item.id);g.active.x=0;g.active.y=3;to=clone(g.cells());after=before;mode='piece';note=item.id==='dye'?'当前落块染成最多颜色':'随机获得一个特殊方块';
     }else if(item.id==='supply'||item.id==='repair'){
       mode=item.id;g.lite.tools[item.id]=1;g.lives=2;const previous=item.id==='supply'?g.dropsRemaining:g.lives;g.liteUseTool(item.id);note=previous+' → '+(item.id==='supply'?g.dropsRemaining:g.lives);after=before;
     }
